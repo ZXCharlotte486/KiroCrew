@@ -81,12 +81,16 @@ to execute a loaded skill safely.
 **Presence of a vetted `playwright-cli` launcher is availability, not approval.**
 The product-managed copy lives at `<data-home>/playwright-cli` and is
 read-only inside every agent sandbox. Gateway execution resolves that leaf first,
-then fixed system install directories whose launcher, Node executable and package
-entry hierarchies the gateway user cannot write. The managed installer stages the
-native Node executable inside the same leaf, and every gateway-owned invocation
-runs that copy plus the attributed `playwright-cli.js` directly; neither a POSIX
-`env node` shebang nor a Windows batch launcher chooses the runtime. Resolution
-never uses `PATH`, `~/.local/bin`, the active project, or the workspace. No safe
+then an operator-provided bundled prefix (`KIROCREW_PLAYWRIGHT_CLI_HOME`), then
+fixed system install directories whose launcher, Node executable and package
+entry hierarchies the gateway user cannot write. The bundled prefix clears the
+same read-only floor as a fixed system directory, so a bundle an agent could
+write is refused exactly as a planted system binary is. The managed installer
+stages the native Node executable inside the same leaf, and every gateway-owned
+invocation runs that copy plus the attributed `playwright-cli.js` directly;
+neither a POSIX `env node` shebang nor a Windows batch launcher chooses the
+runtime. Resolution never uses `PATH`, `~/.local/bin`, the active project, or
+the workspace. No safe
 direct pair means the gateway capability does not exist; installing one makes the
 command available but does not let a shell turn skip the ordinary approval
 ladder. A dashboard session must receive an interactive command grant, a
@@ -711,8 +715,11 @@ is that launcher, and the panel calls it on the non-native transport when the
 normalized host is not loopback. The handler ensures the `show` view is serving
 (the same start path as `/api/browser/view/start`, honouring
 `dashboard.browser_view_port`), then runs the CLI as a supervised child through
-`install.cli_path`/`cli_command`/`cli_env`. `cli_path` accepts only the sealed
-managed leaf or a fixed, non-writable system candidate; it never falls back to
+`install.cli_path`/`cli_command`/`cli_env`. `cli_path` accepts the sealed
+managed leaf, then an operator-provided bundled prefix
+(`KIROCREW_PLAYWRIGHT_CLI_HOME`), then a fixed, non-writable system candidate —
+the bundled prefix passes the same read-only floor as a system candidate; it
+never falls back to
 PATH. `cli_command` treats that launcher as identity only and invokes a sealed or
 fixed non-writable Node plus the attributed package's `playwright-cli.js`. Thus a
 POSIX `#!/usr/bin/env node` shebang cannot select an agent-writable
@@ -933,7 +940,7 @@ this path exists to fix.
 
 | Control | Implementation |
 |---------|----------------|
-| Capability availability | Vetted absolute launcher identity only: `<data-home>/playwright-cli` first, then fixed system locations whose direct launcher, Node and package-entry hierarchies the gateway user cannot write. The managed prefix is on the sensitive-path floor and `_CREW_READONLY_LEAVES`, so agent file tools cannot read or replace it and every agent sandbox can execute but not modify it. Linux precreation requires the launcher leaf itself to be a real directory before and after the create race; a resolving symlink is refused because a bind mount would follow its target and leave the name replaceable. PATH, `~/.local/bin`, project and workspace candidates are ignored. On every OS gateway-owned calls use an attributed direct pair: managed `gateway-node`/`node.exe` plus contained `playwright-cli.js`, or a fixed-system Node and package entry whose complete hierarchies are non-writable. POSIX shebangs, PATH Node, and Windows batch files never receive gateway request data. See [Capability model](#capability-model) for why availability is not approval |
+| Capability availability | Vetted absolute launcher identity only: `<data-home>/playwright-cli` first, then an operator-provided bundled prefix (`KIROCREW_PLAYWRIGHT_CLI_HOME`), then fixed system locations — the bundled prefix and the system locations each resolve only when their direct launcher, Node and package-entry hierarchies the gateway user cannot write. The managed prefix is on the sensitive-path floor and `_CREW_READONLY_LEAVES`, so agent file tools cannot read or replace it and every agent sandbox can execute but not modify it. Linux precreation requires the launcher leaf itself to be a real directory before and after the create race; a resolving symlink is refused because a bind mount would follow its target and leave the name replaceable. PATH, `~/.local/bin`, project and workspace candidates are ignored. On every OS gateway-owned calls use an attributed direct pair: managed `gateway-node`/`node.exe` plus contained `playwright-cli.js`, or a fixed-system Node and package entry whose complete hierarchies are non-writable. POSIX shebangs, PATH Node, and Windows batch files never receive gateway request data. See [Capability model](#capability-model) for why availability is not approval |
 | Dashboard exposure | `show` is bound to `127.0.0.1`; `0.0.0.0` is never passed, because the served view carries remote input |
 | Browser view relay (`/browser-view/…`) | The one token-auth bypass that proxies foreign content. Auth is a per-instance capability token in the path: minted fresh at every view-server start, disclosed only through the cookie-authed owner-gated `/api/browser/view` payload, constant-time-compared against a lock-free snapshot BEFORE the supervisor lock or its OS-level ownership probes are touched — an invalid candidate can never contend either, and the probes themselves run outside the lock on a consistent snapshot. Every unauthenticated miss answers a uniform 404; a caller already holding the current token that lands in a start window (supervisor lock held past the bounded wait) gets a retryable 503 instead — safe to distinguish precisely because only token holders can reach it. Every allow/deny is SEL-audited. Ownership is re-proved after each upstream connection is established, before any byte or frame goes downstream, closing the proof→connect race (a dead child's freed port cannot be inherited by a squatter; a restarted view's new port marks held connections stale). Every relayed non-script response is stamped with the CSP `sandbox` + `nosniff` (+ `Access-Control-Allow-Origin: *` — the token gates access, CORS only gates readability), and the panel frames it in an opaque-origin sandbox, so relayed content never runs with the dashboard origin's ambient authority |
 | Address bar launcher (`POST /api/browser/open`) | Owner-only (cookie/token), on no internal-path list, and the handler refuses an internal-secret caller outright, so an agent cannot use it to skip the shell approval ladder. The URL is re-validated (`http`/`https`, host, and no secret-bearing userinfo, query, or fragment — argv is world-readable) before it is the one free argv element; the session name is derived hex; no sandbox flag is ever added and no config written — the operator's `PLAYWRIGHT_MCP_CONFIG` is inherited as-is. Only sessions this gateway opened are closed at shutdown, never `close-all`/`kill-all`. **Accepted residual:** a token carried in the URL *path* still reaches argv for the life of the CLI process; paths stay allowed because refusing them refuses most ordinary pages. The residual closes when the CLI takes the URL outside argv — #9854 tracks that switch and its version floor |
