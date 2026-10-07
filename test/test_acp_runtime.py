@@ -9849,6 +9849,76 @@ async def test_activate_mode_bracketed_allows_the_launched_agent_every_start():
 
 
 @pytest.mark.asyncio
+async def test_activate_mode_bracketed_refuses_when_the_activated_spec_auto_approves_a_carried_deny():
+    """The carried ``(server, tool)`` deny pairs are fixed when the mount is
+    composed. If the spec this bracket activates auto-approves one of them in its
+    ``allowedTools`` -- an edit landing while ``session/new`` is pending -- kiro-cli
+    sends no permission request for that tool and the per-call gate never refuses
+    it. The bracket re-checks the pairs against the activated spec and terminates
+    the session rather than run a toggle it cannot hold."""
+    from kiro_crew.agent_materialization.worker_agent import DerivedSpecSnapshot
+
+    rt, _, _ = _make_runtime()
+    rt._agent = "kirocrew"
+    # The spec the bracket activates whole-server auto-approves kirocrew-core, so a
+    # carried deny on (kirocrew-core, learn_add) would never prompt.
+    snapshot = DerivedSpecSnapshot(
+        "id",
+        "fp",
+        {"name": "kirocrew", "allowedTools": ["@kirocrew-core"]},
+    )
+    rt._send_and_await = AsyncMock()  # type: ignore[method-assign]
+    rt.terminate_session = AsyncMock()  # type: ignore[method-assign]
+
+    with pytest.raises(AcpRuntimeError, match="auto-approves a switched-off tool"):
+        await rt._activate_mode_bracketed(
+            "s1",
+            "kirocrew",
+            budget=30.0,
+            payload_snapshot=snapshot,
+            wire_registered=True,
+            carried_denied=frozenset({("kirocrew-core", "learn_add")}),
+        )
+    # Refused BEFORE any set_mode goes out, and the already-created session is torn
+    # down rather than left running the bypassable toggle.
+    rt._send_and_await.assert_not_called()
+    rt.terminate_session.assert_awaited_once_with("s1")
+
+
+@pytest.mark.asyncio
+async def test_activate_mode_bracketed_checks_the_live_spec_for_a_non_worker_agent():
+    """``require_fresh_derived_spec`` returns ``None`` for every agent but the worker
+    mirror, so the snapshot carries no spec for an ordinary by-name-granting agent.
+    The bracket must still refuse that agent when its LIVE on-disk spec
+    auto-approves a carried deny -- it falls back to ``_agent_spec_for``, so the gap
+    is not left open for exactly the agents this fix exists for."""
+    from kiro_crew.agent_materialization.worker_agent import DerivedSpecSnapshot
+
+    rt, _, _ = _make_runtime()
+    rt._agent = "kirocrew"
+    # The fresh-path snapshot carries NO spec (as it does for a non-worker agent).
+    snapshot = DerivedSpecSnapshot("id", "fp", None)
+    rt._send_and_await = AsyncMock()  # type: ignore[method-assign]
+    rt.terminate_session = AsyncMock()  # type: ignore[method-assign]
+
+    # The live on-disk spec the activation reads whole-server auto-approves, so the
+    # carried deny would never prompt.
+    live = {"name": "conductor", "allowedTools": ["@kirocrew-core"]}
+    with patch("kiro_crew.acp.session_mcp._agent_spec_for", return_value=live):
+        with pytest.raises(AcpRuntimeError, match="auto-approves a switched-off tool"):
+            await rt._activate_mode_bracketed(
+                "s1",
+                "conductor",
+                budget=30.0,
+                payload_snapshot=snapshot,
+                wire_registered=True,
+                carried_denied=frozenset({("kirocrew-core", "learn_add")}),
+            )
+    rt._send_and_await.assert_not_called()
+    rt.terminate_session.assert_awaited_once_with("s1")
+
+
+@pytest.mark.asyncio
 async def test_activate_mode_bracketed_refresh_still_rejects_a_foreign_mode():
     """The launched-agent allowance is narrow: only ``self._agent`` passes with no
     view. A session start naming some OTHER unprepared mode still raises through the

@@ -137,7 +137,22 @@ element cannot carry -- the table the spec rebuild keeps on a managed entry
 `acp_server_element` does not emit, so a `timeout` set on the declaration the
 element would replace keeps that declaration native rather than run the server on
 the default with nothing to say so -- an entry that is not an object, or a settings
-file that cannot be read safely. Kiro Crew's own marks on an entry are not
+file that cannot be read safely. A control-plane server
+(`kirocrew-core`) is the one exception on the `disabledTools` arm: its tools carry
+no annotations, so every call reaches Crew as a `session/request_permission` the
+client can reject, which is a per-call channel the restriction can ride. For it a
+well-formed `disabledTools` list mounts the per-session element and carries the
+`(server, tool)` pairs on the session's per-call gate
+(`AcpSessionHandle.spec_denied_tools`) instead of withholding the element and
+refusing the session, so the session runs minus the toggled tool. The carry is
+faithful only where the backend prompts for the tool: a tool the agent spec's
+`allowedTools` auto-approves -- a whole-server `@kirocrew-core`, a bare `*`, a glob
+that reaches it -- is approved inside kiro-cli with no permission request, so the
+carried deny would not apply and the element is withheld instead, keeping the
+toggle authoritative on every approval path. A malformed `disabledTools` (not a
+list) carries no pairs, so it too keeps withholding rather than mounting with no
+deny. `skill_search` itself toggled off refuses the search agent's session, by
+spec or by a settings file. Kiro Crew's own marks on an entry are not
 restrictions: the `registry` transport value the rebuild stamps under
 `agent.mcp_registry_mode` -- on the agent spec's managed entry while that mode is
 on, the one state in which Crew writes it; outside registry mode kiro-cli drops a
