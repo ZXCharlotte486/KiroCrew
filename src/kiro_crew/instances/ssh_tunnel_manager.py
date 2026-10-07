@@ -1381,6 +1381,24 @@ class _SshTunnel:
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
 
+    async def _retire_stdout_drain(self) -> None:
+        """Retire the stdout drain WITHOUT waiting for it to reach EOF.
+
+        The counterpart to :meth:`_finish_stdout_drain`, for a DELIBERATE
+        teardown. The buffer that drain fills exists to classify why AWS closed a
+        forward (see :meth:`_ssm_closed_error`); on a stop WE initiated there is
+        no such cause to name, so awaiting EOF only pays the drain's timeout for a
+        notice nothing will read. Cancel the task and move straight to
+        ``_terminate``. Whatever the concurrent drain already captured is kept.
+        """
+        task = self._stdout_task
+        self._stdout_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+
     async def _capture_stderr(self) -> None:
         """Drain whatever the ssh child wrote to stderr (bounded)."""
         proc = self._proc
@@ -1429,7 +1447,7 @@ class _SshTunnel:
                 self._monitor_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await self._monitor_task
-            await self._finish_stdout_drain(timeout=0.5)
+            await self._retire_stdout_drain()
             await self._terminate()
         except Exception:
             self.status.state = previous

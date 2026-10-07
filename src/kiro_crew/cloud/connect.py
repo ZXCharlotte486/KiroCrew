@@ -42,6 +42,11 @@ DEFAULT_LOCAL_PORT = 5599
 # only the token itself is parsed out (the URL is rebuilt for the local port).
 _TOKEN_RE = re.compile(r"[?&]token=([^\s&]+)")
 
+#: Cap on how much of the plugin's captured close notice is quoted into a
+#: failed-tunnel reason. The tail is a short operator-facing line, not anything
+#: parsed, so a bound keeps a chatty plugin from pasting a page into one error.
+_NOTICE_MAX_CHARS = 300
+
 
 @dataclass
 class Connection:
@@ -143,7 +148,7 @@ def connect(
     # fails would leave a live token in SSM history for nothing. Deferring the
     # mint until readiness is confirmed means a failed connect mints no token.
     proc: Optional[subprocess.Popen] = ssm.open_port_forward(
-        instance_id, remote_port, local_port, profile, region
+        instance_id, remote_port, local_port, profile, region, capture_stdout=True
     )
     # Pass proc so the wait bails if the SSM child dies (rather than latching
     # onto some unrelated listener that later appears on the same port).
@@ -525,15 +530,47 @@ def _kill_process_tree(proc: Optional[subprocess.Popen]) -> None:
 def _port_forward_error(proc: Optional[subprocess.Popen], local_port: int) -> str:
     """Return a short reason for a failed tunnel when the child has already exited.
 
-    Note: the tunnel child runs with stdout/stderr=DEVNULL (to avoid pipe-buffer
-    deadlocks), so we can only distinguish "didn't start", "still running but
-    not accepting connections", and "exited prematurely".
+    The tunnel child runs with stderr=DEVNULL, but its stdout is piped and
+    drained into a bounded buffer (:func:`cloud.ssm.open_port_forward` with
+    ``capture_stdout=True``). The plugin prints its close notice there, so when
+    the child has exited that captured notice — stripped of control bytes and
+    bounded — is folded into the reason instead of a bare exit code. With no
+    capture, or none written, the shape alone still distinguishes "didn't start",
+    "still running but not accepting connections", and "exited prematurely".
     """
     if proc is None:
         return f"SSM port-forward did not start on local port {local_port}."
     if proc.poll() is None:
         return f"SSM port-forward did not become ready on local port {local_port}."
-    return f"SSM port-forward exited (rc={proc.returncode}) before local port {local_port} became ready."
+    base = (
+        f"SSM port-forward exited (rc={proc.returncode}) before local port "
+        f"{local_port} became ready."
+    )
+    notice = _captured_notice(proc)
+    return f"{base} {notice}" if notice else base
+
+
+def _captured_notice(proc: subprocess.Popen) -> str:
+    """Return the plugin's captured stdout close notice, cleaned, or ``""``.
+
+    Reads the bounded buffer the stdout drain attached in
+    :func:`cloud.ssm.open_port_forward`. Control bytes are stripped and the
+    result is capped to a single short line so a chatty plugin cannot paste a
+    page of output into one error, and so no stray carriage returns reach the
+    terminal. Absent capture (``stdout_buf`` unset) returns ``""``.
+    """
+    buf = getattr(proc, "stdout_buf", None)
+    if not buf:
+        return ""
+    raw = buf[0] if isinstance(buf, list) else str(buf)
+    # Collapse all whitespace (newlines, tabs, CR) to single spaces and drop
+    # other control bytes, then trim to a bounded one-liner.
+    cleaned = " ".join(raw.split())
+    cleaned = "".join(ch for ch in cleaned if ch == " " or ch.isprintable())
+    cleaned = cleaned.strip()
+    if not cleaned:
+        return ""
+    return cleaned[:_NOTICE_MAX_CHARS].strip()
 
 
 # ── The Fargate lane ──────────────────────────────────────────────────────────

@@ -948,3 +948,63 @@ def test_the_printed_paths_match_the_containers_own_constants():
         "CUSTOMER_TURN_PATH": connect.FARGATE_TURN_PATH,
         "HEALTH_PATH": connect.FARGATE_HEALTH_PATH,
     }
+
+
+class TestPortForwardError:
+    """_port_forward_error surfaces the plugin's captured stdout close notice.
+
+    The sibling of the instances-layer forward: that one captures the close
+    notice already (#13474), this one used to DEVNULL the same stream. Now that
+    cloud.connect opens the forward with capture_stdout=True, a failed tunnel can
+    name the cause instead of a bare exit code.
+    """
+
+    def _exited(self, rc: int, stdout_buf=None):
+        class _Proc:
+            returncode = rc
+
+            def poll(self):
+                return rc
+
+        p = _Proc()
+        if stdout_buf is not None:
+            p.stdout_buf = stdout_buf  # type: ignore[attr-defined]
+        return p
+
+    def test_none_proc_reports_did_not_start(self):
+        assert "did not start" in connect._port_forward_error(None, 5476)
+
+    def test_still_running_reports_not_ready(self):
+        class _Running:
+            returncode = None
+
+            def poll(self):
+                return None
+
+        msg = connect._port_forward_error(_Running(), 5476)
+        assert "did not become ready" in msg
+
+    def test_exited_without_capture_is_bare_reason(self):
+        # No stdout_buf attribute at all (capture off / nothing written).
+        msg = connect._port_forward_error(self._exited(1), 5476)
+        assert "exited (rc=1)" in msg
+        assert msg.strip().endswith(".")
+
+    def test_exited_folds_in_the_captured_notice(self):
+        notice = "Exiting session with sessionId: user-0123456789abcdef."
+        msg = connect._port_forward_error(self._exited(0, [f"\n\n{notice}\n\n"]), 5476)
+        assert "exited (rc=0)" in msg
+        assert notice in msg
+
+    def test_captured_notice_is_bounded_and_control_stripped(self):
+        noisy = "ok\r\n" + ("x" * 5000) + "\x07\x00trailer"
+        msg = connect._port_forward_error(self._exited(0, [noisy]), 5476)
+        # No raw control bytes reach the operator line, and the whole message is
+        # bounded well under the chatty-plugin size.
+        assert "\r" not in msg and "\x07" not in msg and "\x00" not in msg
+        assert len(msg) < 500
+
+    def test_empty_capture_falls_back_to_bare_reason(self):
+        msg = connect._port_forward_error(self._exited(2, [""]), 5476)
+        assert "exited (rc=2)" in msg
+        assert msg.strip().endswith(".")
