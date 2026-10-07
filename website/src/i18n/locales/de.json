@@ -8329,6 +8329,45 @@
       "triggers": "Auslöser",
       "what_this_skill_does_and_when_the_agent_should_u": "Was dieser Skill tut und wann der Agent ihn verwenden soll"
     },
+    "projectMcpTrust": {
+      "args_omitted_one": "(+{{count}} weiteres Argument)",
+      "args_omitted_other": "(+{{count}} weitere Argumente)",
+      "body": "Die Agent-Spezifikation dieses Projekts startet die unten aufgeführten MCP-Server.",
+      "code_warning": "Vertraue nur einem Projekt, dessen Code du auch selbst ausführen würdest. Ein Agent, der hier arbeitet, kann diesen Code ändern.",
+      "confirm": "Vertrauen und ausführen",
+      "consequence": "Wenn du ihm vertraust, startet {{productName}} sie, sobald hier eine Sitzung mit Claude, Codex, Goose oder OpenCode geöffnet wird. Seine MCP-Server und Hooks laufen als du, außerhalb der Tool-Sandbox, noch bevor du eine Nachricht sendest. Dabei können sie deine Dateien lesen und jeden Befehl ausführen, den du ausführen kannst.",
+      "decline": "Ausgeschaltet lassen",
+      "decline_consequence": "Wenn nicht, bleiben diese Server und Hooks ausgeschaltet. Die Tool-Abschaltungen des Projekts gelten weiterhin.",
+      "grant_failed": "Das Vertrauen für diesen Ordner konnte nicht gespeichert werden.",
+      "hook_off": "(aus)",
+      "hooks_body": "Außerdem führt es die unten aufgeführten Hooks aus.",
+      "hooks_omitted_one": "{{count}} weiterer Hook wird nicht angezeigt. Das Vertrauen gilt auch für ihn.",
+      "hooks_omitted_other": "{{count}} weitere Hooks werden nicht angezeigt. Das Vertrauen gilt auch für diese.",
+      "load_failed": "Der MCP-Vertrauensstatus dieses Projekts konnte nicht gelesen werden.",
+      "masked_keys": "Setzt außerdem (Werte verborgen): {{keys}}",
+      "separate": "Das ist unabhängig davon, ob du den Skills des Projekts vertraust.",
+      "servers_omitted_one": "{{count}} weiterer Server wird nicht angezeigt. Das Vertrauen gilt auch für ihn.",
+      "servers_omitted_other": "{{count}} weitere Server werden nicht angezeigt. Das Vertrauen gilt auch für diese.",
+      "title": "MCP-Server und Hooks dieses Projekts ausführen?",
+      "too_many_specs": "Dieses Projekt hat mehr als 64 Agent-Spezifikationen, daher können seine MCP-Server und Hooks weder geprüft noch als vertrauenswürdig eingestuft werden.",
+      "withdraw_hint": "Gilt ab der nächsten Sitzung. Wenn das Projekt diese Server oder Hooks ändert, wirst du erneut gefragt. Du kannst das Vertrauen jederzeit in den MCP-Einstellungen widerrufen.",
+      "working": "Vertrauen wird gespeichert…"
+    },
+    "projectMcpTrustList": {
+      "folder_missing": "Dieser Ordner existiert nicht mehr.",
+      "hint": "Diese Projektordner dürfen eigene MCP-Server und Hooks ausführen, als du und außerhalb der Tool-Sandbox. Widerrufe das Vertrauen für einen Ordner, um sie ausgeschaltet zu lassen.",
+      "load_failed": "Die Projekte, die MCP-Server und Hooks ausführen dürfen, konnten nicht geladen werden.",
+      "revoke": "Widerrufen",
+      "revoke_failed": "Das Vertrauen für diesen Ordner konnte nicht widerrufen werden.",
+      "revoking": "Wird widerrufen…",
+      "title": "Projekte, die MCP-Server und Hooks ausführen dürfen"
+    },
+    "projectMcpTrustNotice": {
+      "load_failed": "Es konnte nicht geprüft werden, ob den MCP-Servern und Hooks dieses Projekts vertraut wird.",
+      "review": "Prüfen",
+      "text_one": "Dieses Projekt deklariert {{count}} MCP-Server oder Hook. Er bleibt ausgeschaltet, bis du ihm vertraust.",
+      "text_other": "Dieses Projekt deklariert {{count}} MCP-Server und Hooks. Diese bleiben ausgeschaltet, bis du ihnen vertraust."
+    },
     "projectSkillsTrust": {
       "body": "${{skill}} kommt aus dem eigenen .kiro/skills-Ordner dieses Projekts.",
       "confirm": "Diesem Ordner vertrauen",

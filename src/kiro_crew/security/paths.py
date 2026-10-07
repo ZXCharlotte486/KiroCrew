@@ -1025,6 +1025,13 @@ _WRITE_PROTECTED_HOME_PATHS += [
     for leaf in ("mcp-launch-approvals", "mcp/resolved")
 ]
 _WRITE_PROTECTED_HOME_PATHS += [
+    # Project-MCP consent (``project_mcp_trust``): a grant lets a checkout's spec
+    # launch commands as the user outside the sandbox. Every writer runs in the
+    # gateway; reading it decides nothing inside the sandbox.
+    f"{prefix}/mcp-project-trust"
+    for prefix in _CREW_HOME_PREFIXES
+]
+_WRITE_PROTECTED_HOME_PATHS += [
     # The cloud launcher's LAUNCH RECORD (``cloud/launch_state.py``): the profile, region
     # and tag the last launch decided. WRITE-protected on the same footing as
     # ``cloud.json`` above, and for a reason that is specific rather than inherited: the

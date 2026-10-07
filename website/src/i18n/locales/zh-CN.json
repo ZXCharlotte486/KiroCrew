@@ -8208,6 +8208,41 @@
       "triggers": "触发词",
       "what_this_skill_does_and_when_the_agent_should_u": "此技能的作用以及代理应在何时使用它"
     },
+    "projectMcpTrust": {
+      "args_omitted_other": "（另有 {{count}} 个参数）",
+      "body": "此项目的智能体规范会启动下方列出的 MCP 服务器。",
+      "code_warning": "只信任你自己也愿意运行其代码的项目。在这里工作的智能体可以更改这些代码。",
+      "confirm": "信任并运行",
+      "consequence": "如果你信任它，每当这里打开 Claude、Codex、Goose 或 OpenCode 会话时，{{productName}} 都会运行它们。它的 MCP 服务器和钩子会以你的身份、在工具沙盒之外运行，而且在你发送消息之前就会运行。它们可以读取你的文件，并运行你能运行的任何命令。",
+      "decline": "保持关闭",
+      "decline_consequence": "如果不信任，这些服务器和钩子将保持关闭。项目的工具关闭设置仍然有效。",
+      "grant_failed": "无法记录此文件夹的信任状态。",
+      "hook_off": "（已关闭）",
+      "hooks_body": "它还会运行下方列出的钩子。",
+      "hooks_omitted_other": "另有 {{count}} 个钩子未显示。信任同样涵盖它们。",
+      "load_failed": "无法读取此项目的 MCP 信任状态。",
+      "masked_keys": "还会设置（值已隐藏）：{{keys}}",
+      "separate": "这与信任项目的技能是分开的。",
+      "servers_omitted_other": "另有 {{count}} 个服务器未显示。信任同样涵盖它们。",
+      "title": "要运行此项目的 MCP 服务器和钩子吗？",
+      "too_many_specs": "此项目的智能体规范超过 64 个，因此无法审查或信任其 MCP 服务器和钩子。",
+      "withdraw_hint": "将在下一个会话中生效。如果项目更改了这些服务器或钩子，系统会再次询问你。你可以随时在 MCP 设置中撤销信任。",
+      "working": "正在信任…"
+    },
+    "projectMcpTrustList": {
+      "folder_missing": "此文件夹已不存在。",
+      "hint": "这些项目文件夹可以以你的身份、在工具沙盒之外运行自己的 MCP 服务器和钩子。撤销某个文件夹即可让它们保持关闭。",
+      "load_failed": "无法加载受信任运行 MCP 服务器和钩子的项目。",
+      "revoke": "撤销",
+      "revoke_failed": "无法撤销此文件夹的信任。",
+      "revoking": "正在撤销…",
+      "title": "受信任运行 MCP 服务器和钩子的项目"
+    },
+    "projectMcpTrustNotice": {
+      "load_failed": "无法检查此项目的 MCP 服务器和钩子是否受信任。",
+      "review": "查看",
+      "text_other": "此项目声明了 {{count}} 个 MCP 服务器和钩子。在你信任之前，它们会保持关闭。"
+    },
     "projectSkillsTrust": {
       "body": "${{skill}} 来自此项目自带的 .kiro/skills 文件夹。",
       "confirm": "信任此文件夹",

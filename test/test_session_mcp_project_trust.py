@@ -2,8 +2,9 @@
 
 On the array-backed hosts (claude, codex, goose, opencode) every server in the
 ``session/new`` ``mcpServers`` array is a command the adapter launches as the user
-at session start. ``session_mcp._project_mcp_trusted`` therefore refuses a
-checkout's own servers: only the switch-off keys of its ``mcpServers``
+at session start. Without the operator's project-MCP consent
+``session_mcp._project_mcp_trusted`` therefore refuses a checkout's own servers
+(the consent itself is pinned in ``test_project_mcp_trust.py``): only the switch-off keys of its ``mcpServers``
 (``disabledTools``, and ``disabled`` when it mutes) survive, layered onto a
 same-named user-level spec or kept on a project-only one. kiro-cli reads specs
 itself, so its path keeps the plain project-nearest resolution.
@@ -17,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from kiro_crew import agent as agent_mod
+from kiro_crew import project_mcp_trust
 from kiro_crew.acp import session_mcp
 from kiro_crew.acp_backends import (
     ACP_BACKEND_CLAUDE,
@@ -36,6 +38,8 @@ _MIRRORED = [ACP_BACKEND_CLAUDE, ACP_BACKEND_CODEX, ACP_BACKEND_GOOSE, ACP_BACKE
 @pytest.fixture
 def agents_dir(tmp_path, monkeypatch):
     """User-level agents dir and global settings in tmp; nothing under the real HOME."""
+    monkeypatch.setenv("KIROCREW_HOME", str(tmp_path / "crew-home"))
+    project_mcp_trust.reset_cache_for_tests()
     agents = tmp_path / "home-agents"
     agents.mkdir()
     monkeypatch.setattr(agent_mod, "KIRO_AGENTS_DIR", agents)
@@ -139,9 +143,10 @@ def test_kiro_clis_own_path_is_unchanged(agents_dir, tmp_path):
     assert "repo-srv" in snapshot["mcpServers"]
 
 
-def test_the_project_spec_is_never_trusted_for_mcp(tmp_path):
-    assert session_mcp._project_mcp_trusted(tmp_path) is False
-    assert session_mcp._project_mcp_trusted(None) is False
+def test_a_project_without_a_grant_is_not_trusted_for_mcp(tmp_path):
+    spec = {"mcpServers": {"x": {"command": "/x"}}}
+    assert session_mcp._project_mcp_trusted(tmp_path, "kirocrew", spec) is False
+    assert session_mcp._project_mcp_trusted(None, "kirocrew", spec) is False
 
 
 def _write_restricting_checkout(root: Path, *, extra: dict | None = None) -> Path:

@@ -94,6 +94,10 @@ def register(app: web.Application) -> None:
     app.router.add_post("/api/mcp/toggle-tool", handlers.api_mcp_toggle_tool)
     app.router.add_post("/api/mcp/toggle-all", handlers.api_mcp_toggle_all)
     app.router.add_post("/api/mcp/remove", handlers.api_mcp_remove)
+    # Owner-only consent for a project checkout's own MCP servers.
+    app.router.add_get("/api/mcp/project-trust", handlers.api_mcp_project_trust)
+    app.router.add_post("/api/mcp/project-trust", handlers.api_mcp_project_trust_grant)
+    app.router.add_delete("/api/mcp/project-trust", handlers.api_mcp_project_trust_revoke)
     app.router.add_post("/api/mcp/oauth/relay", handlers.api_mcp_oauth_relay)
     app.router.add_post("/api/connections/mint", handlers.api_connections_mint)
     app.router.add_get("/api/connections/mint", handlers.api_connections_mint_state)

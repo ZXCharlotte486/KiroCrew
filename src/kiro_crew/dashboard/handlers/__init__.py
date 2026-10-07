@@ -261,6 +261,13 @@ from kiro_crew.dashboard.handlers.mcp import (  # noqa: E402, F401
     api_mcp_toggle_tool,
 )
 
+# ── Project MCP server consent (handlers/mcp_project_trust.py) ──
+from kiro_crew.dashboard.handlers.mcp_project_trust import (  # noqa: E402, F401
+    api_mcp_project_trust,
+    api_mcp_project_trust_grant,
+    api_mcp_project_trust_revoke,
+)
+
 # ── Crew Members (handlers/members.py) ──
 from kiro_crew.dashboard.handlers.members import (  # noqa: E402, F401
     api_member_activity,

@@ -1116,6 +1116,8 @@ _EXPECTED_CALL_SITE_LABELS: dict[str, list[tuple[str, str]]] = {
         ("mcp_server_rows", "dashboard"),
         ("mcp_stub_eligibility", "dashboard"),
     ],
+    # The project-MCP consent reads a checkout's specs to fingerprint and show them.
+    "kiro_crew/project_mcp_trust.py": [("project_mcp_trust", "dashboard")],
     # The side chat's derived read-only spec reads the base agent's spec in
     # BOTH scopes, project first (kiro-cli resolves --agent there before the
     # user level); one label for both so a refusal attributes to the side turn.
@@ -1179,6 +1181,7 @@ _EXPECTED_PROJECT_FILES_CALL_SITE_LABELS: dict[str, list[tuple[str, str]]] = {
     # decide a second time on the same scope, and a second verdict that
     # disagreed would record a denial for a tree the caller already read.
     "kiro_crew/cli_doctor.py": [("doctor", "cli")],
+    "kiro_crew/project_mcp_trust.py": [("project_mcp_trust", "dashboard")],
     # The base-spec read and the shadow check are one surface's two questions
     # about the same checkout, so one label covers both.
     "kiro_crew/dashboard/side_readonly_spec.py": [

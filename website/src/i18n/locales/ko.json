@@ -8208,6 +8208,41 @@
       "triggers": "트리거",
       "what_this_skill_does_and_when_the_agent_should_u": "이 스킬이 무엇을 하고 에이전트가 언제 사용해야 하는지"
     },
+    "projectMcpTrust": {
+      "args_omitted_other": "(+인수 {{count}}개 더)",
+      "body": "이 프로젝트의 에이전트 사양은 아래에 나열된 MCP 서버를 시작합니다.",
+      "code_warning": "직접 실행해도 괜찮다고 생각하는 코드의 프로젝트만 신뢰하세요. 여기서 작업하는 에이전트는 그 코드를 변경할 수 있습니다.",
+      "confirm": "신뢰하고 실행",
+      "consequence": "신뢰하면 이곳에서 Claude, Codex, Goose 또는 OpenCode 세션이 열릴 때 {{productName}}에서 이를 실행합니다. 이 프로젝트의 MCP 서버와 훅은 메시지를 보내기 전에 사용자 권한으로, 도구 샌드박스 밖에서 실행됩니다. 이들은 사용자의 파일을 읽고 사용자가 실행할 수 있는 모든 명령을 실행할 수 있습니다.",
+      "decline": "끈 상태로 두기",
+      "decline_consequence": "신뢰하지 않으면 이 서버와 훅은 꺼진 상태로 유지됩니다. 프로젝트의 도구 끄기 설정은 계속 적용됩니다.",
+      "grant_failed": "이 폴더의 신뢰를 기록하지 못했습니다.",
+      "hook_off": "(꺼짐)",
+      "hooks_body": "아래에 나열된 훅도 실행합니다.",
+      "hooks_omitted_other": "훅 {{count}}개가 더 있지만 표시되지 않습니다. 신뢰하면 이것도 포함됩니다.",
+      "load_failed": "이 프로젝트의 MCP 신뢰 상태를 읽지 못했습니다.",
+      "masked_keys": "추가 설정(값 숨김): {{keys}}",
+      "separate": "이는 프로젝트의 스킬을 신뢰하는 것과는 별개입니다.",
+      "servers_omitted_other": "서버 {{count}}개가 더 있지만 표시되지 않습니다. 신뢰하면 이것도 포함됩니다.",
+      "title": "이 프로젝트의 MCP 서버와 훅을 실행할까요?",
+      "too_many_specs": "이 프로젝트에는 에이전트 사양이 64개를 초과하므로 MCP 서버와 훅을 검토하거나 신뢰할 수 없습니다.",
+      "withdraw_hint": "다음 세션부터 적용됩니다. 프로젝트에서 이 서버나 훅을 변경하면 다시 묻습니다. MCP 설정에서 언제든지 철회할 수 있습니다.",
+      "working": "신뢰하는 중…"
+    },
+    "projectMcpTrustList": {
+      "folder_missing": "이 폴더는 더 이상 존재하지 않습니다.",
+      "hint": "이 프로젝트 폴더는 자체 MCP 서버와 훅을 사용자 권한으로, 도구 샌드박스 밖에서 실행할 수 있습니다. 끈 상태로 두려면 폴더의 신뢰를 철회하세요.",
+      "load_failed": "MCP 서버와 훅 실행을 신뢰받은 프로젝트를 불러오지 못했습니다.",
+      "revoke": "철회",
+      "revoke_failed": "이 폴더의 신뢰를 철회하지 못했습니다.",
+      "revoking": "철회하는 중…",
+      "title": "MCP 서버와 훅 실행을 신뢰받은 프로젝트"
+    },
+    "projectMcpTrustNotice": {
+      "load_failed": "이 프로젝트의 MCP 서버와 훅이 신뢰되었는지 확인하지 못했습니다.",
+      "review": "검토",
+      "text_other": "이 프로젝트는 MCP 서버와 훅 {{count}}개를 선언합니다. 신뢰하기 전까지는 꺼진 상태로 유지됩니다."
+    },
     "projectSkillsTrust": {
       "body": "${{skill}}은(는) 이 프로젝트의 .kiro/skills 폴더에서 온 스킬입니다.",
       "confirm": "이 폴더 신뢰",

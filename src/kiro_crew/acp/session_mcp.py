@@ -85,6 +85,7 @@ from typing import Any, NamedTuple
 from kiro_crew import agent as _agent_mod
 from kiro_crew import hooks as _hooks
 from kiro_crew import mcp_provenance
+from kiro_crew import project_mcp_trust as _project_mcp_trust
 from kiro_crew.acp.mcp_session_report import sanitize_sink_text
 from kiro_crew.agent import (
     _mcp_registry_mode,
@@ -496,7 +497,7 @@ def trusted_project_agent_spec(agent: str, work_dir: str | Path | None) -> tuple
     that fails closed on it keeps doing so.
     """
     declared, spec = project_agent_spec(agent, work_dir)
-    if not declared or spec is None or _project_mcp_trusted(work_dir):
+    if not declared or spec is None or _project_mcp_trusted(work_dir, agent, spec):
         return declared, spec
     logger.info(
         "spec hooks: the project spec for agent %r is not trusted to run commands;"
@@ -516,26 +517,35 @@ def _agent_spec_for(agent: str, work_dir: str | Path | None = None) -> dict[str,
     return _agent_spec_and_snapshot_for(agent, work_dir)[0]
 
 
-def _project_mcp_trusted(work_dir: str | Path | None) -> bool:
+def _project_mcp_trusted(work_dir: str | Path | None, agent: str, spec: dict[str, Any]) -> bool:
     """Whether a checkout's own spec may choose a mirrored session's MCP servers.
 
-    Never. A server in that array is a command the adapter launches as the user at
-    ``session/new``, outside the sandbox and before any prompt, so a spec shipped
-    inside a cloned repository would run its author's code the moment a session
-    opened there. kiro-cli loads a workspace agent only for a trusted workspace;
-    Crew cannot read that verdict, and the project-skills consent covers skill
-    files entering context, not commands launching, so neither is borrowed here.
-    The answer stays ``False`` until a consent exists whose wording names MCP
-    servers. *work_dir* is the seam such a consent would key on. The same verdict
-    gates the spec's ``hooks`` (:func:`trusted_project_agent_spec`), so a consent
-    for it also admits the checkout's hook commands and must say so.
+    Only with the operator's explicit project-MCP consent
+    (:mod:`kiro_crew.project_mcp_trust`). A server in that array is a command the
+    adapter launches as the user at ``session/new``, outside the sandbox and
+    before any prompt, so a spec shipped inside a cloned repository would run its
+    author's code the moment a session opened there. kiro-cli likewise loads a
+    workspace agent only for a trusted workspace.
+    The same verdict gates the spec's ``hooks`` (:func:`trusted_project_agent_spec`),
+    so a consent also admits the checkout's hook commands, and the fingerprint
+    covers them.
 
-    Refusing the servers does not refuse the spec's restrictions: a project entry's
-    switch-off keys (:func:`_project_restrictions`) still apply, because they can
-    only take tools and servers away.
+    The project-skills consent is NOT this consent: it covers skill files
+    entering context, not commands launching, and it lives in a different store
+    this check never reads. Every failure -- no store, an unreadable or malformed
+    one, a directory that is itself a link, an instance that changed since the
+    grant, an unsupported platform -- answers ``False``.
+
+    The grant is bound to a fingerprint of each agent spec's launch set, and
+    *spec* is the one just read for *agent*, so a spec edited after the grant --
+    the checkout stays writable to the agent working in it -- answers ``False``
+    and none of its servers launch until the operator reviews it again.
+
+    Either way the spec's restrictions apply: untrusted, its switch-off keys are
+    kept (:func:`_project_restrictions`); trusted, the whole spec is returned,
+    ``disabledTools`` and mutes included.
     """
-    del work_dir
-    return False
+    return _project_mcp_trust.is_project_trusted(work_dir, agent, spec)
 
 
 def _project_restrictions(spec: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -643,7 +653,8 @@ def _agent_spec_and_snapshot_for(
     a nearer config layer normally does.
 
     **An untrusted checkout never picks the servers.** With *mirrored_session*,
-    a project spec that :func:`_project_mcp_trusted` refuses yields the
+    a project spec the operator granted project-MCP consent for is returned whole,
+    as kiro-cli would load it. One that :func:`_project_mcp_trusted` refuses yields the
     user-level spec of the same name -- the one the user wrote; the checkout's
     ``tools`` filter is nothing the user granted -- with the project's switch-off
     keys (:func:`_project_restrictions`) layered on. With no user-level spec it
@@ -693,7 +704,7 @@ def _agent_spec_and_snapshot_for(
     project = _project_spec_path_for(agent, work_dir)
     if project is not None:
         spec = _read_agent_spec(project, operation="session_mcp_project_agent", source="unknown")
-        if not mirrored_session or spec is None or _project_mcp_trusted(work_dir):
+        if not mirrored_session or spec is None or _project_mcp_trusted(work_dir, agent, spec):
             return spec, None
         logger.info(
             "session MCP: the project spec for agent %r is not trusted to choose MCP"

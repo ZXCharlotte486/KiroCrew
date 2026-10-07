@@ -50,6 +50,7 @@ import { approvalBtnClass, useSpawnApprovals, useToolApproval } from './chat-inp
 import { SpawnApprovalCard } from './chat-input/SpawnApprovalCard'
 import { useComposerPickers } from './chat-input/pickers'
 import { ComposerPickerMenus } from './chat-input/PickerMenus'
+import ProjectMcpTrustNotice from './ProjectMcpTrustNotice'
 import { useDictationControls, useHoldToTalk } from './chat-input/voice'
 import { HoldToTalkBar, MicButton, VoiceCaptureStatus } from './chat-input/VoiceControls'
 import { AgentChip, ContextUsageControl, ModelChip, SessionControlChips, useContextPopover, useShelfMeasure } from './chat-input/ContextShelf'
@@ -875,6 +876,8 @@ function ChatInput({
       {onUploadFiles && (
         <SketchDialog open={sketchOpen} onOpenChange={setSketchOpen} onInsert={onUploadFiles} returnFocusRef={composerAnchorRef} />
       )}
+
+      {!terminal.active && slotId && project && <ProjectMcpTrustNotice slotKey={`dashboard:${slotId}`} project={project} />}
 
       {!terminal.active && <ComposerPickerMenus pickers={pickers} value={value} onChange={onChange} composerAnchorRef={composerAnchorRef} sendOnEnter={sendOnEnter} typedCommandMenus={typedCommandMenus} project={project} agentName={agentName} onFileSelect={onFileSelect} onFileOpen={onFileOpen} />}
 

@@ -8,6 +8,53 @@
 import type { McpApplyChange } from '../../types'
 import type { ClientTransport } from './transport'
 
+/** One stored project-MCP consent. `bound` false means a row that grants nothing. */
+export type McpProjectTrustGrant = {
+  path: string
+  granted_at?: number | null
+  exists?: boolean
+  bound?: boolean
+}
+
+/** One server a project spec would launch, display-bounded. Env and header
+ *  VALUES are never sent: only their names. */
+export type McpProjectLaunchServer = {
+  agent: string
+  name: string
+  command: string
+  args: string[]
+  args_omitted?: number
+  url?: string
+  env_keys?: string[]
+  header_keys?: string[]
+}
+
+/** One hook a project spec would run, display-bounded. Env VALUES are never sent. */
+export type McpProjectLaunchHook = {
+  agent: string
+  event: string
+  command: string
+  action_type?: string
+  matcher?: string
+  enabled?: boolean
+}
+
+/** `/api/mcp/project-trust` answer for the requesting chat. */
+export type McpProjectTrustSnapshot = {
+  project?: string
+  project_key?: string
+  trusted?: boolean
+  servers?: McpProjectLaunchServer[]
+  servers_omitted?: number
+  hooks?: McpProjectLaunchHook[]
+  hooks_omitted?: number
+  too_many_specs?: boolean
+  /** `{agent: fingerprint}` of the launch set shown; echoed back on grant. */
+  launch?: Record<string, string>
+  grants?: McpProjectTrustGrant[]
+  removed?: boolean
+}
+
 /** One machine-readable ground for a sharing verdict.
  *
  *  `code` is stable and is what the UI translates. `detail` is verbatim data
@@ -83,7 +130,7 @@ export type McpManagedServer = {
   recommendation?: McpShareRecommendation
 }
 
-export function createMcpEndpoints({ get, post, put, j, jfetch: fetch }: ClientTransport) {
+export function createMcpEndpoints({ get, post, put, del, j, jfetch: fetch }: ClientTransport) {
   const probeCache = {
     mcpProbeCache: () => fetch('/api/mcp/probe').then(j),
   }
@@ -124,6 +171,24 @@ export function createMcpEndpoints({ get, post, put, j, jfetch: fetch }: ClientT
     mcpToggleTool: (server: string, tool: string, enabled: boolean) => post('/api/mcp/toggle-tool', { server, tool, enabled }).then(j),
     mcpToggleAll: (enabled: boolean) => post('/api/mcp/toggle-all', { enabled }).then(j),
     mcpRemove: (name: string) => post('/api/mcp/remove', { name }).then(j),
+    /** Project MCP consent: this chat's state, the servers its project would
+     *  launch, and every stored grant. Owner-only. */
+    mcpProjectTrust: (sessionKey?: string) =>
+      get('/api/mcp/project-trust', sessionKey).then(j) as Promise<McpProjectTrustSnapshot>,
+    /** Grant THIS chat's project. The server takes the directory from the slot;
+     *  expectedKey and expectedLaunch are the reviewed identity and launch-set
+     *  fingerprints, confirmations and never selectors. */
+    grantMcpProjectTrust: (
+      sessionKey: string | undefined,
+      expectedKey: string,
+      expectedLaunch: Record<string, string>,
+    ) =>
+      post('/api/mcp/project-trust', { expected_key: expectedKey, expected_launch: expectedLaunch }, sessionKey)
+        .then(j) as Promise<McpProjectTrustSnapshot>,
+    /** Withdraw a grant. `path` omitted withdraws this chat's project. */
+    revokeMcpProjectTrust: (path?: string, sessionKey?: string) =>
+      del('/api/mcp/project-trust' + (path ? '?path=' + encodeURIComponent(path) : ''),
+          undefined, sessionKey).then(j) as Promise<McpProjectTrustSnapshot>,
     mcpOAuthRelay: (server: string, redirectUrl: string) =>
       post('/api/mcp/oauth/relay', { server, redirect_url: redirectUrl }).then(j) as Promise<{ ok: boolean }>,
   }

@@ -11,6 +11,7 @@ import ErrorNotice from '../../components/ErrorNotice'
 import { useProvider } from '../../providers'
 import McpBrowserModal from '../../components/McpBrowserModal'
 import McpCustomServerModal from '../../components/McpCustomServerModal'
+import ProjectMcpTrustList from '../../components/ProjectMcpTrustList'
 import type { McpServer, McpApplyChange, McpScopePresence, McpGlobalScope, McpTempRefusal } from '../../types'
 import { useSortableTable } from '../../hooks/useSortableTable'
 import { useScrollEdges } from '../../hooks/useScrollEdges'
@@ -618,6 +619,7 @@ export default function McpTab({ onManagedProviderClick }: McpTabProps = {}) {
         <Btn primary onClick={() => setBrowserOpen(true)}><Download size={14} /> {i18nT('pages.overview.mcpTab.add_server')}</Btn>
       </span>
     </h4>
+    <ProjectMcpTrustList />
     <Card>
       {apply.error && <div className="mb-3 text-[13px] text-danger">{(apply.error as Error).message}</div>}
       {applyMsg && <div className="mb-3 text-[13px] text-ok animate-rise"><Check className="lucide-inline" /> {applyMsg}</div>}

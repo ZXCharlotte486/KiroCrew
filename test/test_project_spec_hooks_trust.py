@@ -108,7 +108,7 @@ def test_the_mcp_trust_verdict_is_what_admits_project_hooks(
     repo = _repo(tmp_path)
     seen: list[object] = []
 
-    def _trusted(work_dir):
+    def _trusted(work_dir, agent, spec):
         seen.append(work_dir)
         return True
 

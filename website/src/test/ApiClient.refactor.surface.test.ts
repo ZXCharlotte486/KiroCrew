@@ -92,6 +92,7 @@ const API_KEY_ORDER = [
   'mcpCustomAdd', 'mcpCustomGet', 'mcpCustomUpdate', 'mcpActive',
   'mcpProbe', 'mcpResetProbeFailures', 'mcpSync', 'mcpApply',
   'mcpToggle', 'mcpToggleTool', 'mcpToggleAll', 'mcpRemove',
+  'mcpProjectTrust', 'grantMcpProjectTrust', 'revokeMcpProjectTrust',
   'mcpOAuthRelay', 'connectionsMint', 'connectionsMintState', 'connectionsPremint',
   'connectionsStatus', 'connectionsTest', 'connectionsCancel', 'connectionsDisconnect',
   'connectionsOAuthClients', 'connectionsOAuthClientSave', 'connectionsOAuthClientDelete', 'mcpGatewayStatus',

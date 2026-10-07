@@ -738,6 +738,12 @@ _CREW_READONLY_LEAVES: tuple[str, ...] = (
     # Gateway resolve-once artifacts choose the entry point substituted for an
     # approved npm launcher. The installer runs in the unsandboxed gateway.
     "mcp/resolved",
+    # The operator's project-MCP consent (``project_mcp_trust``). A grant lets a
+    # checkout's own spec launch commands as the user at ``session/new``, outside
+    # the sandbox, so a sandboxed writer could consent for itself. Read-only, not
+    # hidden: it holds project paths and directory identities, no secret. Every
+    # writer (the dashboard grant and revoke routes) runs in the gateway.
+    "mcp-project-trust",
 )
 
 #: Crew-home leaves that MUST stay read-write for a sandboxed process. Every entry is
@@ -990,6 +996,9 @@ _CREW_CHILD_READABLE_LEAVES: tuple[str, ...] = (
     # Launch trees and records contain no credential. Their integrity is enforced
     # by the read-only mount; foreign harnesses may read the resolved package tree.
     "mcp/resolved",
+    # Project paths and directory identities, no credential; the decision it feeds
+    # is made by the gateway when it builds a session's MCP array.
+    "mcp-project-trust",
 )
 
 
@@ -1462,6 +1471,9 @@ _CREW_PRECREATE_READONLY_DIR_LEAVES: tuple[str, ...] = (
     # Pre-creation gives Linux concrete bind targets on a fresh install.
     "mcp-launch-approvals",
     "mcp/resolved",
+    # No grant file means no project is trusted, which is what an empty
+    # directory means too, so the seal holds on an install that never granted.
+    "mcp-project-trust",
 )
 #: Read-only directory leaves whose NAME must remain the mounted name. A resolving
 #: symlink is unsafe here: the mount follows its target and leaves the lexical name
@@ -1478,6 +1490,7 @@ _CREW_NOFOLLOW_READONLY_DIR_LEAVES: tuple[str, ...] = (
     "pi-gate",
     "mcp-launch-approvals",
     "mcp/resolved",
+    "mcp-project-trust",
 )
 assert set(_CREW_NOFOLLOW_READONLY_DIR_LEAVES) <= set(_CREW_PRECREATE_READONLY_DIR_LEAVES)
 #: Read-only FILE leaves whose NAME must remain the sealed name, for the same reason
@@ -1545,6 +1558,11 @@ _DELEGATED_OVERLAP_LEAF_REASONS: "dict[str, tuple[str, str]]" = {
     "mcp/resolved": (
         "sealed resolved MCP launches",
         "the agent could replace the executable the gateway substitutes for an approved launch",
+    ),
+    "mcp-project-trust": (
+        "sealed project MCP consent",
+        "the agent could trust a checkout whose MCP servers the gateway launches outside "
+        "the sandbox",
     ),
 }
 assert set(_DELEGATED_OVERLAP_LEAF_REASONS) == set(_CREW_NOFOLLOW_READONLY_FILE_LEAVES) | set(

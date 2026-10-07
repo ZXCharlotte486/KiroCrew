@@ -5270,6 +5270,45 @@
       "triggers": "Triggers",
       "what_this_skill_does_and_when_the_agent_should_u": "What this skill does and when the agent should use it"
     },
+    "projectMcpTrust": {
+      "args_omitted_one": "(+{{count}} more argument)",
+      "args_omitted_other": "(+{{count}} more arguments)",
+      "body": "This project's agent spec starts the MCP servers listed below.",
+      "code_warning": "Trust only a project whose code you'd run yourself. An agent working here can change that code.",
+      "confirm": "Trust and run",
+      "consequence": "If you trust it, {{productName}} runs them when a Claude, Codex, Goose or OpenCode session opens here. Its MCP servers and hooks run as you, outside the tool sandbox, before you send a message. They can read your files and run any command you can.",
+      "decline": "Keep them off",
+      "decline_consequence": "If you don't, these servers and hooks stay off. The project's tool switch-offs still apply.",
+      "grant_failed": "Couldn't record trust for this folder.",
+      "hook_off": "(off)",
+      "hooks_body": "It also runs the hooks listed below.",
+      "hooks_omitted_one": "{{count}} more hook is not shown. Trusting covers it too.",
+      "hooks_omitted_other": "{{count}} more hooks are not shown. Trusting covers them too.",
+      "load_failed": "Couldn't read this project's MCP trust state.",
+      "masked_keys": "Also sets (values hidden): {{keys}}",
+      "separate": "This is separate from trusting the project's skills.",
+      "servers_omitted_one": "{{count}} more server is not shown. Trusting covers it too.",
+      "servers_omitted_other": "{{count}} more servers are not shown. Trusting covers them too.",
+      "title": "Run this project's MCP servers and hooks?",
+      "too_many_specs": "This project has more than 64 agent specs, so its MCP servers and hooks can't be reviewed or trusted.",
+      "withdraw_hint": "Takes effect in the next session. If the project changes these servers or hooks, you'll be asked again. You can withdraw it any time in MCP settings.",
+      "working": "Trusting…"
+    },
+    "projectMcpTrustList": {
+      "folder_missing": "This folder no longer exists.",
+      "hint": "These project folders may run their own MCP servers and hooks, as you and outside the tool sandbox. Withdraw a folder to keep them off.",
+      "load_failed": "Couldn't load the projects trusted to run MCP servers and hooks.",
+      "revoke": "Withdraw",
+      "revoke_failed": "Couldn't withdraw trust for this folder.",
+      "revoking": "Withdrawing…",
+      "title": "Projects trusted to run MCP servers and hooks"
+    },
+    "projectMcpTrustNotice": {
+      "load_failed": "Couldn't check whether this project's MCP servers and hooks are trusted.",
+      "review": "Review",
+      "text_one": "This project declares {{count}} MCP server or hook. It stays off until you trust it.",
+      "text_other": "This project declares {{count}} MCP servers and hooks. They stay off until you trust them."
+    },
     "projectSkillsTrust": {
       "body": "${{skill}} comes from this project's own .kiro/skills folder.",
       "confirm": "Trust this folder",
