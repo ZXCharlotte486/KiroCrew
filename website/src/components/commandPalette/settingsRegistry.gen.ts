@@ -1784,6 +1784,18 @@ export const SETTINGS_REGISTRY: SettingEntry[] =
     "configKey": "dashboard.terminal.completion.enabled"
   },
   {
+    "id": "display.cursor-style",
+    "label": "Cursor style",
+    "labelKey": "pages.settings.displayPanel.terminal_cursor_style",
+    "description": "Shape of the terminal cursor. Bar and underline leave the character under it visible.",
+    "tab": "display",
+    "type": "buttonGroup",
+    "occurrence": 1,
+    "params": {
+      "sub": "terminal"
+    }
+  },
+  {
     "id": "display.custom-font",
     "label": "Custom font",
     "labelKey": "pages.settings.displayPanel.custom_font_family",
