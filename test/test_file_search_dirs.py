@@ -9,6 +9,7 @@ sensitivity check.
 from __future__ import annotations
 
 import os
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -449,3 +450,82 @@ class TestApiFileSearchDirs:
             f"walk descended {calls['n']} directories of {levels + 1} -- the "
             "dirs-visited ceiling did not stop the traversal"
         )
+
+
+class TestFileSearchWalkDeadline:
+    """The file-search walk's wall-clock budget (#11419).
+
+    The entry/dir ceilings (``_WALK_MAX_*``) bound how MANY filesystem calls the
+    walk makes, not how LONG each one takes. On local disk a ceiling-reaching
+    walk measured 4.20s worst, under the client's 15s deadline with ~3.6x
+    headroom -- but that figure is local disk only. On an NFS/SSHFS-class mount
+    each ``os.stat``/``scandir`` is a network round trip, so the same bounded
+    number of calls can run many times longer and blow past the client bound,
+    and its Retry re-enters the same bound, failing every attempt. The fix is a
+    server-side wall-clock budget on the walk itself: it stops early and marks
+    the result ``truncated``, the same observable outcome the count ceilings
+    already produce.
+
+    Worker-1 has no network mount, so these tests SIMULATE a slow store: a thin
+    wrapper around ``os.walk`` sleeps per yielded directory, standing in for the
+    per-syscall latency a slow mount adds. The budget is patched DOWN to keep the
+    tests fast; the production default is ``_WALK_TIME_BUDGET_SECS`` (10s).
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_slow_store_truncates_the_walk_at_the_wall_clock_budget(
+        self, tmp_path, mock_sel, monkeypatch
+    ):
+        """MEASUREMENT: the local-disk headroom does NOT hold on a slow store.
+
+        A tree small enough that neither the entry nor the dir ceiling fires, but
+        whose per-directory latency (the slow-store stand-in) sums past the walk
+        budget. Without a time bound the walk runs to completion; with it, the
+        walk stops early and the response is marked ``truncated``. This test
+        fails on main, where the walk has only count ceilings and no time bound.
+        """
+        # 20 directories, each matching the query, none hitting a count ceiling.
+        for d in range(20):
+            (tmp_path / f"widget{d:02d}").mkdir()
+
+        real_walk = files_mod.os.walk
+
+        def slow_walk(*a, **kw):
+            for item in real_walk(*a, **kw):
+                # 60ms per directory: 20 dirs ~= 1.2s of walk, well past the 100ms
+                # budget below, standing in for a slow mount's per-dir latency.
+                time.sleep(0.06)
+                yield item
+
+        # Budget far below the simulated walk time, dir/entry ceilings far above
+        # it, so ONLY the wall-clock bound can stop this walk.
+        with patch.object(files_mod, "_WALK_TIME_BUDGET_SECS", 0.1), \
+                patch.object(files_mod.os, "walk", slow_walk):
+            async with TestClient(TestServer(_make_app())) as client:
+                resp = await client.get(f"/api/file-search?q=widget&project={tmp_path}")
+                assert resp.status == 200
+                body = await resp.json()
+
+        assert body["truncated"] is True, (
+            "a slow store that outruns the walk budget must mark the result "
+            "truncated, not run to completion"
+        )
+        # It still returns the matches it DID collect before the deadline -- a
+        # partial, bounded answer, not an empty one or a hang.
+        assert len(body["results"]) >= 1
+
+    @pytest.mark.asyncio
+    async def test_a_fast_store_is_not_truncated(self, tmp_path, mock_sel, monkeypatch):
+        """Control: with no artificial latency and the production-class budget, the
+        same tree finishes and ``truncated`` is False."""
+        for d in range(20):
+            (tmp_path / f"widget{d:02d}").mkdir()
+
+        with patch.object(files_mod, "_WALK_TIME_BUDGET_SECS", 10.0):
+            async with TestClient(TestServer(_make_app())) as client:
+                resp = await client.get(f"/api/file-search?q=widget&project={tmp_path}")
+                assert resp.status == 200
+                body = await resp.json()
+
+        assert body["truncated"] is False
+        assert len(body["results"]) >= 1
