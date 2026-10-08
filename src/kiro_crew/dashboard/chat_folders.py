@@ -2978,10 +2978,14 @@ async def api_chat_slot_mutes_opened(request: web.Request) -> web.Response:
             "app does not own this slot's transcript",
         )
         return slot_not_found()
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({"error": "invalid JSON", "code": "invalid_json"}, status=400)
+    # Shared parse-and-shape guard: a body that is valid JSON but not an object
+    # (a list, string or number) answers 400 body_not_object instead of letting
+    # the .get() below turn a client mistake into a 500. The body is a fixed set
+    # of control fields, so the shared default byte cap applies.
+    body, body_err = await read_bounded_json(request)
+    if body_err is not None:
+        return body_err
+    assert body is not None  # read_bounded_json returns (dict, None) on success
     expected_created = str(body.get("expected_created") or "")
     async with _slot_meta_txn_lock(state):
         if (
@@ -3031,6 +3035,11 @@ async def api_chat_slot_mutes_opened(request: web.Request) -> web.Response:
                 if slot.mutes_opened == new_value:
                     slot.mutes_opened = prior
                 slot._dirty = True
+                # A concurrent full-slot broadcast (e.g. an approval request)
+                # may have published the tentative value while this save
+                # awaited; publish the rolled-back value now so no dashboard is
+                # left showing a mute that never reached disk.
+                state.push_slot_patch(slot.key, ("mutes_opened",))
                 source, caller = _audit_origin(request)
                 sel().log_api_access(
                     caller=caller,
@@ -3059,6 +3068,8 @@ async def api_chat_slot_mutes_opened(request: web.Request) -> web.Response:
                 if slot.mutes_opened == new_value:
                     slot.mutes_opened = prior
                 slot._dirty = True
+                # Publish the rolled-back value for the same reason as above.
+                state.push_slot_patch(slot.key, ("mutes_opened",))
                 source, caller = _audit_origin(request)
                 sel().log_api_access(
                     caller=caller,
