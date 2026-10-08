@@ -2053,6 +2053,27 @@ class SessionLifecycleService:
                             )
                             waiting_on.append(f"{key} ({holder})")
                             continue
+                        # A parent that ended its turn with ``spawn_run`` children
+                        # still running is idle by the semaphore test above, so
+                        # before this check it was retired outright and its
+                        # retirement cancelled those children ("provider
+                        # shutdown") on every turn any chat took while the sweep
+                        # stayed incomplete. Treat live children the same way a
+                        # mid-turn session is treated: defer with
+                        # ``retire_on_identity_change`` and leave the sweep
+                        # incomplete, so the children outlive the turn and the
+                        # parent is recycled only once it is genuinely idle. The
+                        # snapshot is the same certain-answer read the teardown
+                        # below takes, run here under the same lock hold; a stale
+                        # stamp is not spared, so this never keeps a wrong-account
+                        # holder alive -- it only waits for the right-account
+                        # parent's own children to finish.
+                        if self._snapshot_parent_children(key):
+                            sess.retire_on_identity_change = True
+                            invalidated_keys.append(key)
+                            skipped = True
+                            waiting_on.append(f"{key} (subagents)")
+                            continue
                         del owner._sessions[key]
                         owner._advance_session_generation(key)
                         owner._compact_cooldown_until.pop(key, None)
