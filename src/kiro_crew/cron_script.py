@@ -27,8 +27,10 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1958,6 +1960,323 @@ def resolve_script_path(
     raise PermissionError(f"Script must be under one of {roots_shown}, got: {file_path}")
 
 
+#: Files the gateway writes INSIDE an app's bundle that are credentials, not code.
+#: ``.app_secret`` is the app's bearer credential: ``dashboard.token_auth`` compares it
+#: and issues that app's scoped token. Masked inside every bundle window a cron child
+#: is given, the cron's own app included.
+_APP_BUNDLE_SECRET_LEAVES: tuple[str, ...] = (".app_secret",)
+
+
+@dataclass(frozen=True)
+class CronAppsMask:
+    """What a cron child is told about the apps tree.
+
+    ``hidden`` masks the whole tree, so every app's secret is covered, including an
+    app installed while the child runs. ``windows`` re-expose the bundle this cron
+    runs from (read-write, so an app cron's own code imports and its ``data/`` is
+    writable), and ``window_ids`` pins each window to the directory planned here, so a
+    bundle swapped before the child stages it refuses rather than opening the
+    replacement. The windowed secret is a ``required`` mask: present at planning, so
+    the launcher refuses rather than skips one gone by mask time.
+
+    ``refusal`` is set, and no window opens, when the cron's OWN bundle holds a second
+    hard link to any app's ``.app_secret`` inode: that link would ride into the window
+    and expose a credential, so the owning app's spawn is refused outright with a
+    message naming the app and the linked path. A link inside some OTHER app's bundle
+    costs that app nothing here -- its bundle simply gets no window -- so one app's
+    stray link refuses at most that one app, never every app.
+    """
+
+    hidden: tuple[str, ...] = ()
+    windows: tuple[str, ...] = ()
+    readonly: tuple[str, ...] = ()
+    window_ids: tuple[tuple[str, int, int], ...] = ()
+    required: tuple[str, ...] = ()
+    refusal: str = ""
+
+
+def _app_name_under(path: str, real_apps_root: str) -> str:
+    """The app whose bundle holds *path*, or ``""``.
+
+    Judged on the RESOLVED path, so a link pointing into a bundle names that bundle and
+    a link pointing out of one names nothing. A name that starts with ``.`` (the
+    installer's staging siblings) or is not a plain directory is not a bundle.
+    """
+    try:
+        real = os.path.realpath(path)
+        rel = os.path.relpath(real, real_apps_root)
+    except (OSError, ValueError):
+        return ""
+    if rel == os.curdir or rel == os.pardir or rel.startswith(os.pardir + os.sep):
+        return ""
+    name = rel.split(os.sep, 1)[0]
+    return name if _is_bundle_name(name, real_apps_root) else ""
+
+
+def _is_bundle_name(name: str, real_apps_root: str) -> bool:
+    if not name or name.startswith(".") or "/" in name or "\\" in name or ".." in name:
+        return False
+    candidate = os.path.join(real_apps_root, name)
+    return os.path.isdir(candidate) and not os.path.islink(candidate)
+
+
+def _command_bundle_refs(command: str, real_apps_root: str) -> list[str]:
+    """Apps whose bundle a command's argv names by absolute, ``~`` or ``$VAR`` path."""
+    try:
+        tokens = shlex.split(command, comments=False, posix=True)
+    except ValueError:
+        return []
+    names: list[str] = []
+    for token in tokens:
+        for candidate in (token, token.split("=", 1)[-1]):
+            expanded = os.path.expanduser(os.path.expandvars(candidate))
+            if not os.path.isabs(expanded):
+                continue
+            name = _app_name_under(expanded, real_apps_root)
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def _all_app_secret_ids(real_apps_root: str) -> set[tuple[int, int]]:
+    """``(st_dev, st_ino)`` of every installed app's ``.app_secret`` (and staging copy).
+
+    The set a per-bundle scan is checked against: a bundle holding a hard link to ANY of
+    these inodes would expose that credential through a window, so the owning app's cron
+    is refused. Reads the single-linked common case too, because the scan compares
+    inodes, not link counts.
+    """
+    ids: set[tuple[int, int]] = set()
+    candidates: list[str] = []
+    try:
+        with os.scandir(real_apps_root) as entries:
+            for entry in entries:
+                if entry.is_dir(follow_symlinks=False):
+                    candidates.extend(
+                        os.path.join(entry.path, leaf) for leaf in _APP_BUNDLE_SECRET_LEAVES
+                    )
+                elif entry.name.startswith(".") and entry.name.endswith("-secret-tmp"):
+                    candidates.append(entry.path)
+    except OSError:
+        return ids
+    for path in candidates:
+        try:
+            info = os.lstat(path)
+        except OSError:
+            continue
+        if stat.S_ISREG(info.st_mode):
+            ids.add((info.st_dev, info.st_ino))
+    return ids
+
+
+def _bundle_links_a_secret(
+    bundle: str, secret_ids: set[tuple[int, int]], own_secret: tuple[int, int] | None
+) -> str:
+    """The first path inside *bundle* that is a hard link to another app's secret, or ``""``.
+
+    Walks the bundle tree once. A regular file whose inode is in *secret_ids* and is not
+    the bundle's OWN single ``.app_secret`` (``own_secret``) is a reachable alias to a
+    credential -- the per-window scan the re-land plan asks for, run per bundle so one
+    app's stray link refuses only that app. ``own_secret`` is excluded because the
+    bundle's own secret is masked by name inside the window regardless; a SECOND link to
+    it elsewhere in the same bundle, however, is still reported (it is not at the masked
+    name). Symlinks are not followed: a symlink out of the tree names bytes the window
+    does not expose, and ``realpath`` on every entry would cost a walk of linked trees.
+    """
+    own_secret_path = os.path.join(bundle, _APP_BUNDLE_SECRET_LEAVES[0])
+    for dirpath, dirnames, filenames in os.walk(bundle, followlinks=False):
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            try:
+                info = os.lstat(full)
+            except OSError:
+                continue
+            if not stat.S_ISREG(info.st_mode):
+                continue
+            ident = (info.st_dev, info.st_ino)
+            if ident not in secret_ids:
+                continue
+            # The bundle's own secret at its own name is masked by name; skip exactly
+            # that path, but report a SECOND link to it anywhere else in the bundle.
+            if own_secret is not None and ident == own_secret and full == own_secret_path:
+                continue
+            return full
+    return ""
+
+
+def cron_apps_mask(
+    *,
+    script_file: str = "",
+    command: str = "",
+    owner_app: str = "",
+) -> CronAppsMask:
+    """The apps-tree mask for one cron child, with a window for the bundle it runs from.
+
+    Every cron child gets ``<config_dir>/apps`` masked, in every spelling the crew home
+    has (a symlinked ``$HOME`` reaches one directory by two names, and a mask on one
+    name is no mask on the other). The tree is created when absent, because a mask over
+    a missing directory is no mask at all and the first app installed afterwards would
+    land visible. ``.app_secret`` is a bearer credential -- ``dashboard.token_auth``
+    exchanges it for that app's scoped token -- so no cron child can read any app's,
+    the cron's own app included; an app cron reaches the gateway through
+    ``ScriptContext`` (``ctx.notify``, ``ctx.call_tool``) instead.
+
+    The bundle the cron runs from comes back as a read-write window so its code and
+    sibling modules import and its ``data/`` is writable, with its ``.app_secret``
+    masked inside the window by name AND listed as a required mask (moved aside before
+    the child masks it, the spawn is refused rather than the mask skipped). The owning
+    bundle is the app whose bundle holds the resolved ``script_file``, or ``owner_app``
+    (the job's host-stamped ``created_by`` owner). A ``command``'s argv may name another
+    bundle by path; that bundle's code comes back read-only... (same window, data and
+    secret masked). Every other app's tree stays masked.
+
+    PER-WINDOW scan. Before opening a bundle's window, the bundle tree is scanned for a
+    hard link to any app's ``.app_secret`` inode. If the cron's OWN bundle holds one,
+    the whole spawn is refused (``refusal`` set, no window) -- that link would ride into
+    the window. If some other (``command``-named) bundle holds one, only that bundle's
+    window is withheld; the cron still runs. One app's stray link therefore refuses at
+    most that one app, never every app. A link at a path OUTSIDE the apps tree stays a
+    known gap (tracked separately). Blocking (``stat``/``mkdir``/``walk``), so it runs in
+    the cron worker thread, never on the event loop.
+    """
+    from kiro_crew.apps.manager import apps_dir
+    from kiro_crew.sandbox import crew_home_visible_spellings
+
+    root = apps_dir()
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        logger.warning("could not create %s to mask it for a cron child", root, exc_info=True)
+    root_spellings = crew_home_visible_spellings(str(root))
+    real_root = os.path.realpath(root)
+
+    owned: list[str] = []
+    if script_file:
+        name = _app_name_under(script_file, real_root)
+        if name:
+            owned.append(name)
+    if owner_app and owner_app not in owned and _is_bundle_name(owner_app, real_root):
+        owned.append(owner_app)
+    referenced = [
+        name
+        for name in (_command_bundle_refs(command, real_root) if command else [])
+        if name not in owned
+    ]
+
+    hidden: list[str] = list(root_spellings)
+    windows: list[str] = []
+    readonly: list[str] = []
+    window_ids: list[tuple[str, int, int]] = []
+    required: list[str] = []
+    secret_ids = _all_app_secret_ids(real_root)
+
+    for name in (*owned, *referenced):
+        bundle_real = os.path.join(real_root, name)
+        bundle_id = _settled_bundle_identity(real_root, name)
+        if bundle_id is None:
+            # Mid-update, no settled secret, or not a plain dir: leave it masked.
+            continue
+        own_secret = _plain_file_identity(os.path.join(bundle_real, _APP_BUNDLE_SECRET_LEAVES[0]))
+        linked = _bundle_links_a_secret(bundle_real, secret_ids, own_secret)
+        if linked:
+            if name in owned:
+                # The cron's own bundle would carry a credential into its window. Refuse
+                # the whole spawn, naming the app and the path so the owner can remove
+                # the link; every other app's cron is unaffected.
+                return CronAppsMask(
+                    hidden=tuple(dict.fromkeys(hidden)),
+                    refusal=(
+                        f"cron for app {name!r} refused: its bundle holds a second hard "
+                        f"link to an app secret at {linked!r}; opening the bundle would "
+                        f"expose that credential. Remove the extra link and retry."
+                    ),
+                )
+            # A command-named bundle links a secret: withhold just its window.
+            continue
+        is_owned = name in owned
+        data_id = _plain_dir_identity(os.path.join(bundle_real, "data")) if is_owned else None
+        for spelling in root_spellings:
+            bundle = os.path.join(spelling, name)
+            windows.append(bundle)
+            window_ids.append((bundle, *bundle_id))
+            # The bundle comes back READ-ONLY: its code and sibling modules must import,
+            # but nothing may rewrite what the app's backend later runs, and the window
+            # holds the masked ``.app_secret`` -- a read-only window is the shape both
+            # backends admit for a window that contains a hidden leaf. On Linux the
+            # launcher re-masks the secret after binding; on Seatbelt the secret's own
+            # deny holds inside the read-only window by deny-wins.
+            readonly.append(bundle)
+            secret = os.path.join(bundle, _APP_BUNDLE_SECRET_LEAVES[0])
+            hidden.append(secret)
+            required.append(secret)
+            if is_owned and data_id is not None:
+                # An owned bundle keeps ``data/`` WRITABLE: a read-write window nested
+                # inside the read-only bundle, where the app cron keeps durable state.
+                data = os.path.join(bundle, "data")
+                windows.append(data)
+                window_ids.append((data, *data_id))
+            elif not is_owned:
+                # A command-named bundle earns only its code read: its ``data/`` is
+                # masked inside the window, so a command naming another app cannot
+                # read or write that app's state.
+                hidden.append(os.path.join(bundle, "data"))
+    return CronAppsMask(
+        hidden=tuple(dict.fromkeys(hidden)),
+        windows=tuple(dict.fromkeys(windows)),
+        readonly=tuple(dict.fromkeys(readonly)),
+        window_ids=tuple(dict.fromkeys(window_ids)),
+        required=tuple(dict.fromkeys(required)),
+    )
+
+
+def _plain_file_identity(path: str) -> tuple[int, int] | None:
+    """``(st_dev, st_ino)`` of *path* when it is a plain regular file (never a link)."""
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino) if stat.S_ISREG(info.st_mode) else None
+
+
+def _plain_dir_identity(path: str) -> tuple[int, int] | None:
+    """``(st_dev, st_ino)`` of *path* when it is a real directory (never a link)."""
+    try:
+        info = os.lstat(path)
+    except OSError:
+        return None
+    return (info.st_dev, info.st_ino) if stat.S_ISDIR(info.st_mode) else None
+
+
+def _settled_bundle_identity(real_apps_root: str, name: str) -> tuple[int, int] | None:
+    """The bundle's identity when it may be windowed; ``None`` keeps it masked.
+
+    A bundle is windowed only in a settled state: a real directory, no install or
+    update staging beside it (the installer moves ``data/`` and the secret out to
+    ``.<name>-data-tmp`` / ``.<name>-secret-tmp`` while it swaps the tree), and a secret
+    present as a plain regular file (not a symlink; a symlinked secret points at bytes
+    the window does not pin). A bundle without a secret stays masked, since a secret
+    written into it later would be readable through the window.
+
+    A second hard LINK to the secret is NOT judged here: the link count does not gate
+    settledness. The per-window inode scan (:func:`_bundle_links_a_secret`) decides a
+    linked secret precisely -- a link inside the cron's own bundle refuses only that
+    app, a link inside another bundle withholds only that window -- so a stray link to
+    one app's secret never withholds every window.
+    """
+    for staging in (f".{name}-data-tmp", f".{name}-secret-tmp"):
+        if os.path.lexists(os.path.join(real_apps_root, staging)):
+            return None
+    bundle = os.path.join(real_apps_root, name)
+    for leaf in _APP_BUNDLE_SECRET_LEAVES:
+        try:
+            info = os.lstat(os.path.join(bundle, leaf))
+        except OSError:
+            return None
+        if not stat.S_ISREG(info.st_mode):
+            return None
+    return _plain_dir_identity(bundle)
+
+
 def _resolve_internal_secret(port: int) -> str:
     """Internal secret for ScriptContext HTTP calls (e.g. notify -> /api/send-message).
 
@@ -2215,6 +2534,7 @@ def run_script_sandboxed(
     secret_env_pin: str = "",
     delivery: str = "",
     internal_secret_provider: Callable[[], str] | None = None,
+    owner_app: str = "",
 ) -> dict:
     """Run a cron script in a sandboxed subprocess via wrap_argv().
 
@@ -2457,17 +2777,33 @@ def run_script_sandboxed(
         # STRICT sandbox profile (credential stores and every crew-internal
         # dir hidden), keeping the child's reachable surface as small as the
         # sandbox can make it. Ungranted scripts keep their normal view.
+        #
+        # Both branches mask the apps tree, so no app's ``.app_secret`` is readable.
+        # An ungranted script keeps the bundle it runs from as a read-write window (its
+        # code and sibling modules must import, its ``data/`` is writable) with its own
+        # ``.app_secret`` masked inside. A granted script gets no window: its reader is
+        # pinned to ``crons/``, so it is never a bundle script, and a window would
+        # reopen the mutable-sibling route the grant isolation closes.
         if stdin_payload is not None:
+            apps_mask = cron_apps_mask()
+            apps_mask = CronAppsMask(hidden=apps_mask.hidden, refusal=apps_mask.refusal)
             hidden = tuple(
                 dict.fromkeys(
                     (
                         str(config_dir() / "crons"),
                         str(Path(file_path_str).resolve().parent),
+                        *apps_mask.hidden,
                     )
                 )
             )
         else:
-            hidden = ()
+            apps_mask = cron_apps_mask(script_file=file_path_str, owner_app=owner_app)
+            hidden = apps_mask.hidden
+        if apps_mask.refusal:
+            # The cron's own bundle holds a hard link to an app secret; opening its
+            # window would expose that credential. Refuse this one app's spawn (every
+            # other app's cron is unaffected) rather than run it unmasked.
+            return {"status": "error", "error": f"❌ {apps_mask.refusal}"}
         # Same tier as ``run_command_sandboxed`` below: a script body is
         # agent-written, so it is the HIGHER-capability cron surface, and it
         # ran the WIDER profile — ``standard`` leaves ~/.aws/credentials, the
@@ -2486,7 +2822,13 @@ def run_script_sandboxed(
         # secret instead of exposing a store.
         sandbox_mode = "strict" if stdin_payload is not None else "cc"
         sandboxed_argv, sandbox_cleanup = wrap_argv(
-            argv, mode=sandbox_mode, extra_hidden_dirs=hidden
+            argv,
+            mode=sandbox_mode,
+            extra_hidden_dirs=hidden,
+            extra_private_dirs=apps_mask.windows,
+            extra_private_dir_ids=apps_mask.window_ids,
+            extra_readonly_private_dirs=apps_mask.readonly,
+            extra_required_mask_targets=apps_mask.required,
         )
         if stdin_payload is not None and sandboxed_argv == argv:
             # On a host with no OS sandbox backend, the unsandboxed-exec
@@ -2932,6 +3274,7 @@ def run_command_sandboxed(
     job_id: str | None = None,
     secret_env: dict[str, str] | None = None,
     secret_env_pin: str = "",
+    owner_app: str = "",
 ) -> dict:
     """Run a shell command in a sandboxed subprocess via wrap_argv().
 
@@ -3008,7 +3351,23 @@ def run_command_sandboxed(
         if shell is None:
             return {"status": "error", "output": _no_command_shell_message(), "exit_code": -1}
         argv = _command_argv(shell, command)
-        sandboxed_argv, sandbox_cleanup = wrap_argv(argv, mode="cc")
+        # Same apps-tree mask as the script path: every app's ``.app_secret`` is hidden
+        # from the command child, the owner's bundle (or a bundle the command names by
+        # path) comes back as a read-write window with its own secret masked inside, and
+        # every other app's tree stays masked. A bundle whose tree links another app's
+        # secret refuses only that app's command cron (see :func:`cron_apps_mask`).
+        apps_mask = cron_apps_mask(command=command, owner_app=owner_app)
+        if apps_mask.refusal:
+            return {"status": "error", "output": f"❌ {apps_mask.refusal}", "exit_code": -1}
+        sandboxed_argv, sandbox_cleanup = wrap_argv(
+            argv,
+            mode="cc",
+            extra_hidden_dirs=apps_mask.hidden,
+            extra_private_dirs=apps_mask.windows,
+            extra_private_dir_ids=apps_mask.window_ids,
+            extra_readonly_private_dirs=apps_mask.readonly,
+            extra_required_mask_targets=apps_mask.required,
+        )
         sandboxed_argv = cgroup_scope_argv(sandboxed_argv)  # cgroup DoS ceiling
         clean_env = _clean_cron_env()
         if _spawn_cancelled(job_id):
