@@ -16239,6 +16239,7 @@
         "system_default_named": "সিস্টেম ডিফল্ট ({{device}})",
         "ffmpeg_is_missing_voice_recordings_from_the_brow": "ffmpeg নেই — এটি ইনস্টল না হওয়া পর্যন্ত ব্রাউজার থেকে আসা ভয়েস রেকর্ডিং ট্রান্সক্রাইব করা যাবে না।",
         "the_bundled_audio_decoder_is_missing_or_damaged": "বান্ডল করা অডিও ডিকোডারটি নেই বা ক্ষতিগ্রস্ত। {{productName}} ডেস্কটপ অ্যাপটি পুনরায় ইনস্টল করুন; আলাদাভাবে FFmpeg ইনস্টল করবেন না।",
+        "desktop_app_ships_no_decoder_homebrew_hint": "{{productName}} ডেস্কটপ অ্যাপের এই সংস্করণে FFmpeg নেই। টার্মিনালে নিচের কমান্ডটি চালিয়ে Homebrew (brew.sh) দিয়ে এটি ইনস্টল করুন।",
         "then_restart_the_gateway_so_it_can_import_the_ne": "তারপর gateway পুনরায় চালু করুন যাতে এটি নতুন প্যাকেজগুলি ইমপোর্ট করতে পারে।",
         "the_desktop_app_can_t_add_transcribe_support_ins": "ডেস্কটপ অ্যাপে Transcribe সমর্থন যোগ করা যাবে না — এর অন্তর্ভুক্ত Python অতিরিক্ত প্যাকেজ ইনস্টল করতে পারে না। পরিবর্তে pip দিয়ে {{productName}} ইনস্টল করুন এবং সেই এনভায়রনমেন্ট থেকে gateway চালান।",
         "this_gateway_s_python_can_t_install_extra_packag": "এই gateway-এর Python অতিরিক্ত প্যাকেজ ইনস্টল করতে পারে না, তাই এখানে Transcribe চালু করা যাবে না। এমন একটি Python এনভায়রনমেন্টে gateway চালান যেখানে pip দিয়ে boto3 + amazon-transcribe ইনস্টল করা যায়।",

@@ -1551,6 +1551,11 @@ class TestBundledFfmpeg:
             frozenset({filename} if signer_rewritten else ()),
         )
         monkeypatch.setattr(transcribe.platform_compat, "is_bundled_interpreter", lambda: True)
+        # A release that SHIPS a decoder, whatever this host's own platform is: the
+        # fail-closed rules below are about that release, not about macOS Intel.
+        monkeypatch.setattr(
+            transcribe.decoder, "artifact_for", lambda *a, **k: transcribe.decoder.ARTIFACTS[0]
+        )
         return binary
 
     def test_resolves_the_exact_wheel_resource(self, monkeypatch, tmp_path):
@@ -1588,6 +1593,41 @@ class TestBundledFfmpeg:
 
         monkeypatch.setattr(transcribe, "_trusted_site_package_roots", _unexpected_roots)
         assert transcribe._bundled_ffmpeg() is None
+
+    @staticmethod
+    def _release_without_a_decoder(monkeypatch, system_ffmpeg):
+        """A bundled interpreter on a platform no decoder ships for (macOS Intel)."""
+        monkeypatch.setattr(transcribe.platform_compat, "is_bundled_interpreter", lambda: True)
+        monkeypatch.setattr(transcribe.decoder, "artifact_for", lambda *a, **k: None)
+
+        def _unexpected_roots():
+            raise AssertionError("a release that ships no decoder scanned its bundle for one")
+
+        monkeypatch.setattr(transcribe, "_trusted_site_package_roots", _unexpected_roots)
+        monkeypatch.setattr(transcribe, "_find_system_ffmpeg", lambda: system_ffmpeg)
+
+    def test_a_release_with_no_decoder_executes_the_system_one(self, monkeypatch):
+        """Nothing was shipped to be damaged, so failing closed would only break voice.
+
+        The Intel half of the universal app carries no imageio-ffmpeg. It resolves
+        exactly like a source install: a system FFmpeg from the fixed directories
+        first.
+        """
+        self._release_without_a_decoder(monkeypatch, "/usr/local/bin/ffmpeg")
+        assert transcribe._open_ffmpeg_for_execution() == "/usr/local/bin/ffmpeg"
+
+    def test_a_release_with_no_decoder_reports_the_system_one(self, monkeypatch):
+        """Status names the decoder execution would run, and where it came from."""
+        self._release_without_a_decoder(monkeypatch, "/usr/local/bin/ffmpeg")
+        assert transcribe._find_ffmpeg() == "/usr/local/bin/ffmpeg"
+        assert transcribe.ffmpeg_source() == transcribe.FFMPEG_SOURCE_SYSTEM
+
+    def test_a_release_with_no_decoder_and_no_system_one_reports_none(self, monkeypatch, tmp_path):
+        self._release_without_a_decoder(monkeypatch, None)
+        monkeypatch.setattr(transcribe.decoder, "store_dir", lambda: tmp_path)
+        assert transcribe._open_ffmpeg_for_execution() is None
+        assert transcribe._find_ffmpeg() is None
+        assert transcribe.ffmpeg_source() is None
 
     def test_packaged_cli_without_electron_parent_uses_release_decoder(self, monkeypatch, tmp_path):
         binary = self._fake_package(monkeypatch, tmp_path)
@@ -2075,9 +2115,8 @@ class TestBundledFfmpeg:
         authenticate. imageio-ffmpeg is a real dev dependency, so its wheel puts
         this platform's executable in site-packages -- the same upstream bytes the
         desktop build stages -- which turns one transcribed literal per host into a
-        checked claim. Across the Linux, Windows and macOS-arm64 legs that covers
-        three of the five pins; the two no runner can supply are shape-guarded
-        below.
+        checked claim. The Linux, Windows and macOS-arm64 legs cover every pin but
+        linux-aarch64, which no runner can supply and is shape-guarded below.
 
         CI may not skip this. Every CI leg runs on a platform the desktop matrix
         ships, and pip resolves that platform's imageio-ffmpeg wheel, which carries
@@ -2125,13 +2164,10 @@ class TestBundledFfmpeg:
     def test_every_pin_is_a_well_formed_size_and_sha256(self):
         """Shape guard for the pinned values no CI leg can hash.
 
-        macOS Intel and linux-aarch64 have no runner that installs their upstream
-        executable, and the only gate that EXECUTES a staged decoder
-        (``_packaged_ffmpeg_version_probe``, called from
-        ``local_voice_runtime_gate`` in packaging/build-desktop.sh) is skipped for
-        the Intel slice. So for those two entries a truncated digest or a
-        zero-length size would otherwise reach a desktop user as a generic
-        "missing or damaged decoder" remedy with CI fully green. The bounds are
+        linux-aarch64 has no runner that installs its upstream executable, so for
+        that entry a truncated digest or a zero-length size would otherwise reach a
+        desktop user as a generic "missing or damaged decoder" remedy with CI fully
+        green. The bounds are
         deliberately loose -- an ffmpeg build is tens of megabytes and a signed one
         stays under _MAX_SIGNED_FFMPEG_BYTES -- so a legitimate version bump passes
         while a transcription slip does not.

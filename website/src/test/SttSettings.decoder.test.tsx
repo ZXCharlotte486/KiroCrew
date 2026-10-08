@@ -203,6 +203,34 @@ describe('SttSettings audio decoder', () => {
     expect(screen.queryByText(/ffmpeg is missing/i)).toBeNull()
   })
 
+  it('sends a desktop release that ships no decoder to a system install', async () => {
+    // macOS Intel: the release carries no decoder, so "reinstall the app" would
+    // never fix it. The gateway says `unsupported`, and the page offers the
+    // system command a source install gets.
+    mount({
+      bundled: true,
+      ffmpeg: { auto_fetch: 'unsupported', os: 'Darwin', arch: 'x86_64' },
+      prereqs: ['brew install ffmpeg'],
+    })
+    await waitFor(() => expect(screen.getByText(/ffmpeg is missing/i)).toBeTruthy())
+    expect(screen.getByText('brew install ffmpeg')).toBeTruthy()
+    expect(screen.getByText(/desktop app doesn't include FFmpeg/i)).toBeTruthy()
+    expect(screen.queryByText(/bundled audio decoder is missing or damaged/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /download decoder/i })).toBeNull()
+  })
+
+  it('keeps the bare command for a source install on a Mac', async () => {
+    // A source install is run by someone who already chose a terminal, and its
+    // build never carried a decoder, so the desktop-app sentence would be wrong.
+    mount({
+      bundled: false,
+      ffmpeg: { auto_fetch: 'unsupported', os: 'Darwin', arch: 'x86_64' },
+      prereqs: ['brew install ffmpeg'],
+    })
+    await waitFor(() => expect(screen.getByText('brew install ffmpeg')).toBeTruthy())
+    expect(screen.queryByText(/desktop app doesn't include FFmpeg/i)).toBeNull()
+  })
+
   it('renders nothing about the decoder before the status probe has answered', async () => {
     // Claiming a decoder is missing while the probe is still running would offer a
     // download on a host that already has one.

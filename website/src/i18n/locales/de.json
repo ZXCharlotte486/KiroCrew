@@ -16239,6 +16239,7 @@
         "system_default_named": "Systemstandard ({{device}})",
         "ffmpeg_is_missing_voice_recordings_from_the_brow": "ffmpeg fehlt — Sprachaufnahmen aus dem Browser können erst transkribiert werden, wenn es installiert ist.",
         "the_bundled_audio_decoder_is_missing_or_damaged": "Der gebündelte Audiodecoder fehlt oder ist beschädigt. Installiere die {{productName}}-Desktop-App neu; installiere FFmpeg nicht separat.",
+        "desktop_app_ships_no_decoder_homebrew_hint": "Diese Version der {{productName}}-Desktop-App enthält kein FFmpeg. Installieren Sie es mit Homebrew (brew.sh), indem Sie den folgenden Befehl im Terminal ausführen.",
         "then_restart_the_gateway_so_it_can_import_the_ne": "Starte anschließend das Gateway neu, damit es die neuen Pakete importieren kann.",
         "the_desktop_app_can_t_add_transcribe_support_ins": "Die Desktop-App kann keine Transcribe-Unterstützung hinzufügen — ihr gebündeltes Python kann keine zusätzlichen Pakete installieren. Installiere {{productName}} stattdessen mit pip und starte das Gateway aus dieser Umgebung.",
         "this_gateway_s_python_can_t_install_extra_packag": "Das Python dieses Gateways kann keine zusätzlichen Pakete installieren, daher lässt sich Transcribe hier nicht aktivieren. Führe das Gateway in einer Python-Umgebung aus, in der pip boto3 + amazon-transcribe installieren kann.",
