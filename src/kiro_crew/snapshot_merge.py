@@ -124,6 +124,33 @@ def _copy_tree_no_overwrite(src: Path, dst: Path, *, allow_unpinned: bool = Fals
     )
 
 
+def _install_core_file_if_absent(src: Path, dst: Path) -> bool:
+    """Copy one top-level core file into the data home only where nothing is there.
+
+    Returns True when the bundle's bytes were installed, False when the copy was
+    skipped (the destination name is occupied, or the source is a link, a
+    hardlink alias or not a regular file; a source skip is reported).
+
+    The callers decide "nothing is there" with ``is_file()`` and then copied with
+    ``shutil.copy2``. Those are two resolutions of the same names: ``is_file()`` is
+    False for a dangling symlink, which ``copy2`` then FOLLOWS and so writes the
+    bundle's file wherever the link points, outside the data home; and the staged
+    source is read by name after a by-name check, so a swap in the agent-writable
+    staging tree between the two hands ``copy2`` a different file -- a hardlink to
+    a credential being a regular file every name check accepts.
+
+    ``copy_file_pinned`` opens the source once with ``O_NOFOLLOW`` and judges the
+    descriptor (regular, one link), and creates the destination
+    ``O_CREAT|O_EXCL|O_NOFOLLOW``, so a link planted at either name is refused
+    rather than followed and "absent" is the same atomic fact as "this call
+    created it". This is the config component's existing install path, applied
+    to the memory and cron core files.
+    """
+    return pinned_fs.copy_file_pinned(
+        str(src), str(dst), skip_existing=True, on_skip=_facade()._report_skip
+    )
+
+
 _MERGE_ALLOWED_TABLES = frozenset(
     {
         "semantic_memory",
@@ -265,20 +292,103 @@ def _merge_crons(src_path: Path, dst_path: Path) -> bool:
     A failing WRITE of the merged store is not a refusal: the ``OSError``
     propagates, which is the loud behavior the caller's error path expects.
     """
+    # Each name is resolved ONCE. The read used to be `read_text` and the rewrite
+    # `write_text`, both by name: a link planted at the live name between them made
+    # the rewrite truncate whatever it pointed at, and a link or hardlink alias in
+    # the staging tree was read as the bundle's cron store. Now each file is opened
+    # once, judged on its descriptor, and read through it; the rewrite is an atomic
+    # replace inside the SAME pinned directory, after checking the name still holds
+    # the inode that was read. A rename replaces the directory entry and never
+    # follows it, so no planted link can redirect the write.
+    dst_dir_fd: int | None = None
+    try:
+        try:
+            src = json.loads(_read_cron_store_once(src_path, what="bundle's cron store")[0])
+        except (OSError, ValueError) as exc:
+            print(f"  ⚠️  Could not read {src_path}: {exc} — skipping cron merge")
+            return False
+        try:
+            if pinned_fs.supports_pinned_walk():
+                dst_dir_fd = pinned_fs.pin_parent(
+                    os.path.realpath(dst_path.parent), what="live cron store", refusal=OSError
+                )
+            dst_text, dst_seen = _read_cron_store_once(
+                dst_path, what="live cron store", dir_fd=dst_dir_fd
+            )
+            dst = json.loads(dst_text)
+        except (OSError, ValueError) as exc:
+            print(f"  ⚠️  Could not read {dst_path}: {exc} — skipping cron merge")
+            return False
+        if not _usable_cron_shape(src, src_path) or not _usable_cron_shape(dst, dst_path):
+            return False
+        return _write_merged_crons(src, dst, dst_path, dst_seen, dst_dir_fd)
+    finally:
+        if dst_dir_fd is not None:
+            os.close(dst_dir_fd)
+
+
+def _read_cron_store_once(
+    path: Path, *, what: str, dir_fd: int | None = None
+) -> tuple[str, os.stat_result]:
+    """Open *path* once, judge the descriptor, and read the text through it.
+
+    Returns the decoded text and the descriptor's ``fstat``: the identity the
+    caller re-checks before it replaces the name. Where the platform can pin,
+    *path* is opened relative to *dir_fd* (or a parent pinned here) with
+    ``O_NOFOLLOW``; elsewhere ``open_file_no_reparse`` still refuses a link at
+    the final name in the same operation as the open. ``O_NONBLOCK`` keeps a name
+    that became a FIFO from hanging the restore. The descriptor must be a regular
+    file with ONE link: a hardlink alias of a credential passes every link screen
+    and only the link count shows it. Refusals raise ``OSError``.
+    """
+    own_dir_fd = False
+    if dir_fd is None and pinned_fs.supports_pinned_walk():
+        dir_fd = pinned_fs.pin_parent(os.path.realpath(path.parent), what=what, refusal=OSError)
+        own_dir_fd = True
+    try:
+        if dir_fd is not None:
+            flags = (
+                os.O_RDONLY
+                | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0)
+                | getattr(os, "O_CLOEXEC", 0)
+            )
+            fd = os.open(path.name, flags, dir_fd=dir_fd)
+        else:
+            fd = platform_compat.open_file_no_reparse(path, nonblocking=True)
+    finally:
+        if own_dir_fd and dir_fd is not None:
+            os.close(dir_fd)
+    try:
+        seen = os.fstat(fd)
+        if not _stat.S_ISREG(seen.st_mode):
+            raise OSError(f"the {what} is not a regular file: {str(path)!r}")
+        if seen.st_nlink != 1:
+            raise OSError(
+                f"the {what} has {seen.st_nlink} hard links, so it is another name for "
+                f"a file this merge was not pointed at: {str(path)!r}"
+            )
+        with os.fdopen(fd, "rb") as handle:
+            fd = -1  # ownership passed to the file object
+            raw = handle.read()
+    finally:
+        if fd >= 0:
+            os.close(fd)
     # Cron job names are operator-authored text and routinely non-ASCII, so the
     # locale codepage is the wrong decoder for this file on any host.
-    try:
-        src = json.loads(src_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        print(f"  ⚠️  Could not read {src_path}: {exc} — skipping cron merge")
-        return False
-    try:
-        dst = json.loads(dst_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        print(f"  ⚠️  Could not read {dst_path}: {exc} — skipping cron merge")
-        return False
-    if not _usable_cron_shape(src, src_path) or not _usable_cron_shape(dst, dst_path):
-        return False
+    return raw.decode("utf-8"), seen
+
+
+def _write_merged_crons(
+    src: dict[str, Any],
+    dst: dict[str, Any],
+    dst_path: Path,
+    dst_seen: os.stat_result,
+    dst_dir_fd: int | None,
+) -> bool:
+    """Fold *src*'s new jobs into *dst* and replace the live store atomically."""
+    from kiro_crew.atomic_write import atomic_write, atomic_write_at
+
     existing = {j.get("name") for j in dst.get("jobs", [])}
     imported = 0
     for job in src.get("jobs", []):
@@ -288,7 +398,27 @@ def _merge_crons(src_path: Path, dst_path: Path) -> bool:
         job["id"] = hashlib.md5(f"{name}-imported".encode(), usedforsecurity=False).hexdigest()[:8]
         dst.setdefault("jobs", []).append(job)
         imported += 1
-    dst_path.write_text(json.dumps(dst, indent=2), encoding="utf-8")
+    document = json.dumps(dst, indent=2)
+    seen_ident = (dst_seen.st_dev, dst_seen.st_ino)
+    mode = _stat.S_IMODE(dst_seen.st_mode)
+    # The name must still hold the inode that was read: a replacement swapped in
+    # between the read and this write is not the store these jobs were merged into.
+    # A refusal imports nothing, which the caller reports. The rename itself never
+    # follows a link, so the remaining check-to-rename window can at worst replace
+    # a swapped-in entry with the merged store -- never write through it.
+    if dst_dir_fd is not None:
+        now = pinned_fs.stat_at(dst_dir_fd, dst_path.name)
+    else:
+        now = pinned_fs.lstat_by_name(dst_path)
+    if now is None or (now.st_dev, now.st_ino) != seen_ident:
+        print(f"  ⚠️  {dst_path} was replaced while the cron merge read it — skipping cron merge")
+        return False
+    if dst_dir_fd is not None:
+        atomic_write_at(dst_dir_fd, dst_path.name, document, fsync=True, mode=mode)
+    else:
+        # No dir_fd (Windows, reached only with --allow-unpinned-staging): the same
+        # atomic replace the cron store itself uses, by name.
+        atomic_write(dst_path, document, mode=mode)
     total = len(src.get("jobs", []))
     print(f"  Cron jobs imported: {imported} (skipped {total - imported} duplicates)")
     return True
