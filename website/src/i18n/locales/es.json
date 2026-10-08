@@ -16454,6 +16454,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "Transcribe la voz en el cuadro de mensaje al hacer clic en el micrófono",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "En la mayoría de teclados de Windows y Linux la tecla Alt derecha es AltGr, que ayuda a escribir caracteres acentuados, así que aquí una Opción sola no puede ser el valor predeterminado.",
+        "ptt_enabled": "Usar una tecla para empezar a dictar",
+        "ptt_enabled_hint": "Desactiva esto para que ninguna tecla inicie el dictado; aún puedes dictar con el botón del micrófono.",
         "ptt_heading": "Empezar a dictar con una tecla",
         "ptt_heading_desc": "Pulsa una tecla para hablar en lugar de hacer clic en el micrófono. Opción derecha ⌥ funciona desde el principio: puedes dejarlo todo como está.",
         "ptt_hold_seconds": "{{secs}} segundos",

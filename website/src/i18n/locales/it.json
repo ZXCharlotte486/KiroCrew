@@ -16454,6 +16454,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "Trascrivi la voce nella casella del messaggio quando clicchi sul microfono",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "Nella maggior parte delle tastiere Windows e Linux il tasto Alt destro è AltGr, che serve a digitare caratteri accentati, quindi qui un Opzione da solo non può essere il valore predefinito.",
+        "ptt_enabled": "Usa un tasto per avviare la dettatura",
+        "ptt_enabled_hint": "Disattivalo per impedire che un tasto avvii la dettatura — puoi comunque dettare con il pulsante del microfono.",
         "ptt_heading": "Avviare la dettatura con un tasto",
         "ptt_heading_desc": "Premi un tasto per parlare invece di fare clic sul microfono. Opzione destro ⌥ funziona subito: puoi lasciare tutto così.",
         "ptt_hold_seconds": "{{secs}} secondi",

@@ -15946,6 +15946,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "マイクをクリックすると音声をメッセージボックスに文字起こし",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "多くの Windows および Linux のキーボードでは右 Alt キーが AltGr で、アクセント付き文字の入力に使われます。そのため Option 単独をここでの既定にはできません。",
+        "ptt_enabled": "キーで音声入力を開始する",
+        "ptt_enabled_hint": "これをオフにすると、キーで音声入力が始まらなくなります。マイクボタンからの音声入力は引き続き使えます。",
         "ptt_heading": "キーで音声入力を開始",
         "ptt_heading_desc": "マイクボタンをクリックする代わりに、キーを押して話し始められます。右 Option ⌥ はそのまま使えるので、ここの設定は変更しなくてもかまいません。",
         "ptt_hold_seconds": "{{secs}} 秒",

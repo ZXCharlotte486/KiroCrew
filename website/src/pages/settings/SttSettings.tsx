@@ -529,6 +529,19 @@ function PushToTalkConfig() {
     <SettingsSection title={i18nT('pages.settings.sttSettings.ptt_heading')} collapsible>
       <p className="text-[12px] text-muted mb-1">{i18nT(headingDescKey)}</p>
 
+      {/* The off switch. Default ON — the key trigger has always been on, and a
+          T2 fix leaves that default alone — so this is purely an opt-out for the
+          user who keeps triggering recording by accident on the bound modifier.
+          With it off the mic button stays the way in and the rows below have
+          nothing to configure, so they dim rather than vanish: a reader who
+          turned it off can still see WHICH key they turned off. */}
+      <SettingsToggle
+        label={i18nT('pages.settings.sttSettings.ptt_enabled')}
+        hint={i18nT('pages.settings.sttSettings.ptt_enabled_hint')}
+        checked={cfg.enabled}
+        onChange={v => patch({ enabled: v })}
+      />
+
       <SettingsSelect
         label={i18nT('pages.settings.sttSettings.ptt_key')}
         description={i18nT(keyDescKey)}
@@ -536,6 +549,7 @@ function PushToTalkConfig() {
         options={options}
         optionLabels={optionLabels}
         onChange={code => { if (code !== '__chord__') patch({ binding: { code } }) }}
+        disabled={!cfg.enabled}
       />
 
       {/* Right Alt is AltGr on most non-mac layouts (reports ctrl+alt and
@@ -556,13 +570,14 @@ function PushToTalkConfig() {
         value={cfg.mode}
         options={PTT_MODES.map(m => ({ value: m, label: i18nT(PTT_MODE_LABEL_KEY[m]) }))}
         onChange={v => patch({ mode: v as PttMode })}
+        disabled={!cfg.enabled}
       />
 
       {/* Hidden rather than disabled outside hybrid: the cutoff has no meaning
           at all there. Its description names the mode that uses it, so when it
           IS shown the dependency is explicit rather than inferred from the row
           appearing and disappearing. */}
-      {cfg.mode === 'hybrid' && (
+      {cfg.enabled && cfg.mode === 'hybrid' && (
         <SettingsStepper
           label={i18nT('pages.settings.sttSettings.ptt_hold_threshold')}
           description={i18nT('pages.settings.sttSettings.ptt_hold_threshold_desc')}
@@ -572,17 +587,21 @@ function PushToTalkConfig() {
         />
       )}
 
-      <div className="flex flex-col gap-1.5 py-1.5">
-        <span className="text-[13px] font-semibold text-text">{i18nT('components.pttTestStrip.title')}</span>
-        <span className="text-[12px] text-muted">{i18nT('pages.settings.sttSettings.ptt_try_desc')}</span>
-        <PttTestStrip
-          binding={cfg.binding}
-          mode={cfg.mode}
-          holdMs={cfg.holdMs}
-          modeLabel={modeLabel}
-          fieldLabel={keyFieldLabel}
-        />
-      </div>
+      {/* The test strip listens for the bound key, so it has nothing to show
+          once the trigger is off — hidden rather than dimmed. */}
+      {cfg.enabled && (
+        <div className="flex flex-col gap-1.5 py-1.5">
+          <span className="text-[13px] font-semibold text-text">{i18nT('components.pttTestStrip.title')}</span>
+          <span className="text-[12px] text-muted">{i18nT('pages.settings.sttSettings.ptt_try_desc')}</span>
+          <PttTestStrip
+            binding={cfg.binding}
+            mode={cfg.mode}
+            holdMs={cfg.holdMs}
+            modeLabel={modeLabel}
+            fieldLabel={keyFieldLabel}
+          />
+        </div>
+      )}
     </SettingsSection>
   )
 }

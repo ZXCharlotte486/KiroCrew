@@ -16454,6 +16454,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "Transcrever a voz na caixa de mensagem quando você clicar no microfone",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "Na maioria dos teclados Windows e Linux a tecla Alt direita é AltGr, que ajuda a digitar caracteres acentuados, então aqui um Option sozinho não pode ser o padrão.",
+        "ptt_enabled": "Usar uma tecla para começar a ditar",
+        "ptt_enabled_hint": "Desative isto para que nenhuma tecla inicie o ditado — você ainda pode ditar pelo botão do microfone.",
         "ptt_heading": "Começar a ditar com uma tecla",
         "ptt_heading_desc": "Pressione uma tecla para falar em vez de clicar no microfone. Option direita ⌥ funciona de imediato — você pode deixar tudo como está.",
         "ptt_hold_seconds": "{{secs}} segundos",

@@ -9132,6 +9132,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "Transcribe voice into the message box when you click the mic",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "On most Windows and Linux keyboards the right Alt key is AltGr, which helps type accented characters — so a lone Option cannot be the default here.",
+        "ptt_enabled": "Use a key to start dictation",
+        "ptt_enabled_hint": "Turn this off to stop a key from starting dictation — you can still dictate from the microphone button.",
         "ptt_heading": "Start dictation with a key",
         "ptt_heading_desc": "Press a key to start talking instead of clicking the microphone button. Right Option ⌥ works out of the box — you can leave everything here as it is.",
         "ptt_hold_seconds": "{{secs}} seconds",

@@ -15946,6 +15946,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "点击麦克风时将语音转写到消息框",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "在多数 Windows 和 Linux 键盘上，右 Alt 键就是 AltGr，用来帮助输入带重音的字符 —— 所以这些平台不能用单独的 Option 作为默认值。",
+        "ptt_enabled": "用一个键开始语音输入",
+        "ptt_enabled_hint": "关闭后，按键将不再开始语音输入——你仍然可以用麦克风按钮进行语音输入。",
         "ptt_heading": "用一个键开始语音输入",
         "ptt_heading_desc": "按一个键就开始说话，不用去点麦克风按钮。右 Option ⌥ 开箱可用 —— 这里的设置你可以完全不动。",
         "ptt_hold_seconds": "{{secs}} 秒",

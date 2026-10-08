@@ -16200,6 +16200,8 @@
         "transcribe_voice_into_the_message_box_when_you_c": "Stimme in das Nachrichtenfeld transkribieren, wenn Sie auf das Mikrofon klicken",
         "us_east_1": "us-east-1",
         "ptt_altgr_note": "Auf den meisten Windows- und Linux-Tastaturen ist die rechte Alt-Taste AltGr und hilft beim Tippen von Sonderzeichen — eine einzelne Wahltaste kann hier also nicht der Standard sein.",
+        "ptt_enabled": "Diktat mit einer Taste starten",
+        "ptt_enabled_hint": "Schalte dies aus, damit keine Taste das Diktat startet — du kannst weiterhin über die Mikrofonschaltfläche diktieren.",
         "ptt_heading": "Diktat mit einer Taste starten",
         "ptt_heading_desc": "Drücke eine Taste, um zu sprechen, statt auf das Mikrofonsymbol zu klicken. Rechte Wahltaste ⌥ funktioniert sofort — du kannst hier alles so lassen.",
         "ptt_hold_seconds": "{{secs}} Sekunden",
