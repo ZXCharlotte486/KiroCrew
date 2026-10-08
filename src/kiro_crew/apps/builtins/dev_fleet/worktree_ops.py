@@ -2482,19 +2482,43 @@ _LEASE_REFUSAL_PREFIX = (
 _DISCARD_OVERRIDABLE_CODES = frozenset({"merged_dirty", "closed_dirty", "active"})
 
 
-async def _prunable(path: str, branch: str | None) -> dict:
+async def _prunable(
+    path: str, branch: str | None, pr_index: "fleet_state.PrIndex | None" = None
+) -> dict:
     """Structured prune verdict. Squash-merge safe: PR merged + clean -> ok.
 
     Does NOT require ahead==0 (git cherry never reports 0 for squash merges).
     The race guard in _worktree_remove handles the edge case of commits pushed
     after the PR was merged by comparing branch OID to the PR's headRefOid.
+
+    *pr_index* is an optional repo-wide PR index. When supplied every GitHub
+    read in this verdict -- the PR status and the merged/closed head-OID guard
+    -- resolves from it instead of a per-worktree ``gh pr list`` network call,
+    so a batched preview's cost is independent of worktree count. The verdict
+    is byte-identical either way: the index serves the same newest-row status
+    and the same MERGED-gated reused-head decision the per-head paths do.
     """
     # Resolve the full HEAD once so cache invalidation cannot alias distinct
     # commits that share an abbreviated prefix. Reuse it for the merge guard.
     head_oid = (await repository._git(path, "rev-parse", "HEAD")) if branch else None
-    pr = (await fleet_state._pr_status_cached(branch, head_oid)) if branch else None
+    pr = await fleet_state._pr_status_cached(branch, head_oid, index=pr_index) if branch else None
     own = await repository._own_commits_count(path)
     dirty = await repository._real_dirty(path)
+
+    async def _merged_head_oid() -> str | None:
+        # The MERGED-gated head OID the squash-safe guard needs. From the batch
+        # index (no network) when the preview supplied one AND the head is a
+        # hit, else the per-head fresh fetch. A miss against a SATURATED index
+        # is unknown (the head may have aged out of the window), so it falls
+        # back to the per-head fetch rather than reading absence as "no PR".
+        # Both paths apply the SAME reused-head/saturation decision, so the
+        # merged/closed verdict is byte-identical.
+        if not branch:
+            return None
+        if pr_index is not None and (pr_index.has(branch) or not pr_index.saturated):
+            return pr_index.merged_head_oid(branch)
+        return await fleet_state._fetch_pr_head_oid(branch, repo=(pr or {}).get("_repo"))
+
     # Classify the dirt so the preview can tell a tree blocked by real edits
     # apart from one blocked only by leftover session scratch. Both stay
     # non-candidates -- prune never discards files without explicit consent --
@@ -2520,11 +2544,7 @@ async def _prunable(path: str, branch: str | None) -> dict:
         # Same squash-safe race guard removal enforces: commits pushed AFTER
         # the merge mean the branch OID diverged from the PR head — surface it
         # at preview time instead of letting the candidate fail every run.
-        pr_oid = (
-            await fleet_state._fetch_pr_head_oid(branch, repo=(pr or {}).get("_repo"))
-            if branch
-            else None
-        )
+        pr_oid = await _merged_head_oid()
         if not head_oid or not pr_oid:
             # Cannot verify the squash-safe guard: removal would refuse this
             # anyway, so never present it as a candidate (fail-closed verdict
@@ -2564,11 +2584,7 @@ async def _prunable(path: str, branch: str | None) -> dict:
         #    work that has nothing to do with the PR that was declined. The
         #    guard is fail-closed: an OID that cannot be established withholds
         #    the candidate rather than trusting the name-based lookup.
-        pr_oid = (
-            await fleet_state._fetch_pr_head_oid(branch, repo=(pr or {}).get("_repo"))
-            if branch
-            else None
-        )
+        pr_oid = await _merged_head_oid()
         if not head_oid or not pr_oid:
             return {**base, "ok": False, "code": "closed_unverified", "unmerged_commits": unmerged}
         if not await fleet_state._head_contained_in_pr(path, head_oid, pr_oid):
@@ -2584,21 +2600,26 @@ async def _prunable(path: str, branch: str | None) -> dict:
 async def _prune_candidates() -> dict:
     worktrees = await repository._discover_worktrees()
     # The per-worktree verdict (_prunable) is several read-only git calls plus
-    # one or more networked gh calls (a PR-status lookup, its per-repo fallback
-    # traversal, and a merged/closed head-OID check), so a plain serial loop
-    # scales with fleet size: a 111-worktree fleet floors at ~57s even at one gh
-    # call each, double the gateway app proxy's 30s _PROXY_TIMEOUT, so the
-    # preview returns 504 and the button never renders. Run the verdicts
-    # concurrently under the same _PRUNE_CONCURRENCY bound the parallel prune
-    # workers use -- this path is read-only git (rev-parse, status,
+    # the GitHub facts about the worktree's head branch: its PR status and the
+    # merged/closed head-OID guard. Fetching those per worktree is one or two
+    # networked gh calls EACH, so a 111-worktree fleet floors at ~57s even at
+    # one gh call each -- double the gateway app proxy's 30s _PROXY_TIMEOUT, so
+    # the preview 504s and the button never renders. The batch pre-fetch fetches
+    # every PR ONCE up front (one repo-wide `gh pr list` per repo) and hands the
+    # index to each verdict, so per-worktree GitHub cost is zero: the network
+    # work is O(1) in worktree count. A None index (owner/repo unresolved or the
+    # list failed) sends each verdict to its own per-head fetch, so the preview
+    # still works at O(N) GitHub cost. Verdicts run concurrently under
+    # _PRUNE_CONCURRENCY: the path is read-only git (rev-parse, status,
     # rev-list/cherry, merge-base) so it never touches _GIT_MUTATION_LOCK, which
-    # only the destructive removal path holds.
+    # only destructive removal holds.
     prunable = [w for w in worktrees if not w.get("is_main")]
+    pr_index = await fleet_state._build_pr_index()
     sem = asyncio.Semaphore(_PRUNE_CONCURRENCY)
 
     async def _verdict(w: dict) -> tuple[dict, dict]:
         async with sem:
-            v = await _prunable(w["path"], w.get("branch"))
+            v = await _prunable(w["path"], w.get("branch"), pr_index=pr_index)
         return w, v
 
     # gather preserves the argument order in its result list regardless of

@@ -150,6 +150,166 @@ async def _fetch_pr_status(branch: str) -> dict | None:
     return None
 
 
+class PrIndex:
+    """A single repo-wide ``gh pr list`` indexed by head branch.
+
+    The prune preview classifies every worktree, and each verdict reads two
+    GitHub facts about the worktree's head branch: the newest PR's status
+    (merged/closed/open + display fields) and, for a terminal verdict, the
+    MERGED-gated head OID. Fetching those per worktree is one or two networked
+    ``gh pr list --head`` calls EACH, so the preview's GitHub cost scaled with
+    worktree count. This index fetches them all once up front -- one repo-wide
+    list per repo (upstream + any fallback repos) -- so a per-worktree verdict
+    resolves from memory.
+
+    ``rows`` maps a head branch name to every PR row on that head, newest
+    first (``gh pr list`` sorts by ``createdAt`` descending). The two readers
+    mirror the per-head paths they replace EXACTLY:
+
+      * :meth:`status_row` returns the newest row, shaped like
+        ``_pr_query_one`` (``_repo``/``_head_oid``/``_body`` internal keys), so
+        a cache seeded from it is indistinguishable from a live per-head fetch.
+      * :meth:`merged_head_oid` applies :func:`_merged_head_oid_from_rows` to a
+        head's whole row list, so its reused-head/saturation decision is
+        byte-identical to :func:`_fetch_pr_head_oid`.
+
+    ``saturated`` is True when any queried repo returned a full page
+    (``len == _BATCH_PR_LIST_LIMIT``): the repo has at least that many PRs, so
+    the oldest were cut and a head missing from the index may simply have aged
+    past the window rather than having no PR. A MISS is then UNKNOWN, not
+    "no PR" -- :meth:`has` lets a caller tell the two apart and fall back to a
+    per-head fetch for a miss, so an aged-out merged head is never silently
+    reclassified and a wrong ``None`` is never cached. A HIT is always trusted:
+    the head's own rows are present in full, and the reused-head guard inside
+    :func:`_merged_head_oid_from_rows` still rules on them.
+    """
+
+    __slots__ = ("rows", "saturated")
+
+    def __init__(self, rows: dict[str, list[dict]], saturated: bool = False):
+        self.rows = rows
+        self.saturated = saturated
+
+    def has(self, branch: str) -> bool:
+        """True when this branch has at least one row in the index (a HIT).
+
+        A caller distinguishes a trusted miss (``not has`` and not
+        ``saturated`` -> genuinely no PR) from an unknown one (``not has`` and
+        ``saturated`` -> may have aged out of the window) with this plus
+        ``saturated``.
+        """
+        return bool(self.rows.get(branch))
+
+    def status_row(self, branch: str) -> dict | None:
+        head_rows = self.rows.get(branch)
+        if not head_rows:
+            return None
+        pr = dict(head_rows[0])
+        pr["_head_oid"] = pr.pop("headRefOid", None)
+        if "body" in pr:
+            pr["_body"] = pr.pop("body") or ""
+        return pr
+
+    def merged_head_oid(self, branch: str) -> str | None:
+        return _merged_head_oid_from_rows(self.rows.get(branch) or [])
+
+
+#: Fields the batch list fetches: the union of what ``_pr_query_one`` (status
+#: display) and ``_fetch_pr_head_oid`` (state + head OID) each read per head,
+#: plus ``headRefName`` so the flat repo-wide list can be indexed by head.
+_BATCH_PR_FIELDS = "number,state,url,isDraft,title,body,headRefName,headRefOid"
+
+
+async def _batch_pr_list(owner_repo: str) -> list[dict] | None:
+    """One repo-wide ``gh pr list`` across all states, newest first.
+
+    ``--limit`` is generous: it must cover every head in the fleet AND, per
+    head, enough rows that the reused-head decision is not fed a view a
+    reused branch could have truncated. ``gh`` caps rows globally, not per
+    head, so the cap is sized for the whole repo's open+recent-terminal PRs.
+    """
+    rc, stdout, _ = await runtime._run_cmd(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            owner_repo,
+            "--state",
+            "all",
+            "--json",
+            _BATCH_PR_FIELDS,
+            "--limit",
+            str(_BATCH_PR_LIST_LIMIT),
+        ],
+        timeout=30,
+    )
+    if rc != 0:
+        return None
+    try:
+        prs = json.loads(stdout)
+    except ValueError:
+        return None
+    return prs if isinstance(prs, list) else None
+
+
+#: Row cap for the one repo-wide batch list. Sized for the whole repo's
+#: open+recent-terminal PR volume, well above any realistic fleet's worktree
+#: count. When a repo has more PRs than this, its list comes back full and the
+#: index is marked saturated: a head missing from a saturated index is treated
+#: as UNKNOWN and resolved by a per-head fetch, so an aged-out PR is never read
+#: as "no PR". A head that IS present is ruled from its own complete rows.
+_BATCH_PR_LIST_LIMIT = 500
+
+
+async def _build_pr_index() -> PrIndex | None:
+    """Fetch and index every PR once: upstream repo, then fallback repos.
+
+    Returns None when owner/repo cannot be resolved OR the upstream list fails,
+    so the caller falls back to the per-worktree path rather than treating an
+    empty index as "no PRs anywhere" (which would misclassify merged/closed
+    trees as fresh/active and offer live work for pruning). A fallback repo
+    that fails is skipped: its PRs are legacy-remote and best-effort, exactly
+    as ``_fetch_pr_status`` treats them.
+    """
+    owner_repo = await _get_owner_repo()
+    if not owner_repo:
+        return None
+    primary = await _batch_pr_list(owner_repo)
+    if primary is None:
+        return None
+    index: dict[str, list[dict]] = {}
+    # A full page from ANY queried repo means that repo has at least the cap in
+    # PRs, so its oldest rows were cut: a head missing from the index may have
+    # aged out rather than having no PR. The flag makes a miss UNKNOWN so the
+    # caller falls back to a per-head fetch rather than trusting absence.
+    saturated = len(primary) >= _BATCH_PR_LIST_LIMIT
+
+    def _absorb(rows: list[dict], repo: str) -> None:
+        for pr in rows:
+            head = pr.get("headRefName")
+            if not head:
+                continue
+            pr["_repo"] = repo
+            index.setdefault(head, []).append(pr)
+
+    _absorb(primary, owner_repo)
+    # First-matching-repo precedence: a head already indexed by an earlier repo
+    # (upstream, then each fallback in turn) is not re-absorbed by a later one,
+    # mirroring _fetch_pr_status' "upstream first, fallback only on miss" order.
+    # The exclusion set is refreshed AFTER each absorb so a head first seen in
+    # fallback repo A is not also taken from fallback repo B.
+    for repo in repository._FALLBACK_REPOS or []:
+        rows = await _batch_pr_list(repo)
+        if rows is None:
+            continue
+        if len(rows) >= _BATCH_PR_LIST_LIMIT:
+            saturated = True
+        seen = set(index)
+        _absorb([r for r in rows if r.get("headRefName") not in seen], repo)
+    return PrIndex(index, saturated=saturated)
+
+
 async def _head_contained_in_pr(path: str, branch_oid: str, pr_head_oid: str) -> bool:
     """True when the worktree HEAD is the PR head or an ANCESTOR of it.
 
@@ -241,7 +401,19 @@ async def _fetch_pr_head_oid(branch: str, repo: str | None = None) -> str | None
         return None
     if not isinstance(prs, list):
         return None
-    # Saturation: more rows than the ceiling means the batch may be truncated,
+    return _merged_head_oid_from_rows(prs)
+
+
+def _merged_head_oid_from_rows(prs: list[dict]) -> str | None:
+    """The MERGED-gated head OID for one head's PR rows, or None.
+
+    The reused-head decision for ``_fetch_pr_head_oid`` (its FRESH per-head
+    ``gh pr list``) and the batched prune pre-fetch's per-head slice. Both feed
+    the SAME rules here so a batched verdict is byte-identical to the per-head
+    one: a saturated head fails closed, any OPEN row refuses, otherwise the
+    first MERGED row's OID is returned.
+    """
+    # Saturation: more rows than the ceiling means the view may be truncated,
     # so an OPEN PR could sit past what was fetched. Fail closed rather than
     # rule on a partial view (withholding costs a manual removal; a wrong
     # ancestry-contained removal would destroy active work).
@@ -257,7 +429,9 @@ async def _fetch_pr_head_oid(branch: str, repo: str | None = None) -> str | None
     return None
 
 
-async def _pr_status_cached(branch: str, head_oid: str | None = None) -> dict | None:
+async def _pr_status_cached(
+    branch: str, head_oid: str | None = None, index: "PrIndex | None" = None
+) -> dict | None:
     """Return cached PR status for a branch.
 
     *head_oid* is the full current worktree HEAD commit.  When provided and
@@ -267,6 +441,13 @@ async def _pr_status_cached(branch: str, head_oid: str | None = None) -> dict | 
     a branch name being reused for a new head commit.  Callers that do not have
     the head OID readily available may omit *head_oid*; the cache then degrades
     to the previous behaviour (MERGED is terminal, non-MERGED expires via TTL).
+
+    *index* is an optional repo-wide :class:`PrIndex`. When supplied the fresh
+    lookup reads the branch's newest row from it instead of a per-branch
+    ``gh pr list`` network call -- this is the prune preview's batched path. A
+    branch absent from the index resolves to None (no PR), the same answer a
+    live miss gives. The cache write and MERGED-staleness check below are
+    unchanged, so a seeded entry is indistinguishable from a live-fetched one.
     """
     if not branch or branch == repository.BASE_BRANCH:
         return None
@@ -290,7 +471,19 @@ async def _pr_status_cached(branch: str, head_oid: str | None = None) -> dict | 
                 return ent.get("data")
         elif (now - ent["ts"]) < _PR_TTL:
             return ent.get("data")
-    data = await _fetch_pr_status(branch)
+    if index is None:
+        data = await _fetch_pr_status(branch)
+    elif index.has(branch):
+        data = index.status_row(branch)
+    elif index.saturated:
+        # Miss against a saturated index: the branch may have aged out of the
+        # window rather than having no PR, so a per-head fetch settles it
+        # instead of caching a wrong "no PR".
+        data = await _fetch_pr_status(branch)
+    else:
+        # Miss against a complete index: genuinely no PR for this branch, the
+        # same answer a live miss gives.
+        data = None
     if data and data.get("state") == "MERGED" and head_oid and data.get("_head_oid") != head_oid:
         # GitHub may return the old merged PR when a branch name is reused
         # before a replacement PR exists. A local head contained in the PR
@@ -1692,7 +1885,11 @@ __all__ = (
     "_PROVISION_INFLIGHT",
     "_PROVISION_LOCK",
     "_PR_CACHE",
+    "_PR_HEAD_LOOKUP_LIMIT",
     "_PR_TTL",
+    "_BATCH_PR_FIELDS",
+    "_BATCH_PR_LIST_LIMIT",
+    "PrIndex",
     "_SERVING_REASON",
     "_START_EPOCH",
     "_TICKET_ID_RE",
@@ -1700,6 +1897,8 @@ __all__ = (
     "_build_context",
     "_build_fleet",
     "_build_pending",
+    "_build_pr_index",
+    "_batch_pr_list",
     "_coerce_uint",
     "_context_cached",
     "_cpu_percent",
@@ -1727,6 +1926,7 @@ __all__ = (
     "_log_fleet_rebuild_failure",
     "_measure_dir_bytes",
     "_measure_dir_mb",
+    "_merged_head_oid_from_rows",
     "_orphan_count_sync",
     "_parse_html_repo_base",
     "_parse_systemctl_records",

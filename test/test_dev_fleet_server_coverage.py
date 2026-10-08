@@ -1697,11 +1697,12 @@ async def test_prune_candidates_surfaces_closed_unmerged_flag(monkeypatch):
         ),
     )
 
-    async def fake_prunable(path, branch):
+    async def fake_prunable(path, branch, pr_index=None):
         if branch == "c":
             return {"ok": True, "code": "closed", "unmerged_commits": True}
         return {"ok": True, "code": "merged"}
 
+    monkeypatch.setattr(fleet_state, "_build_pr_index", AsyncMock(return_value=None))
     monkeypatch.setattr(worktree_ops, "_prunable", fake_prunable)
     out = await worktree_ops._prune_candidates()
     by_name = {c["name"]: c for c in out["candidates"]}
@@ -1727,7 +1728,7 @@ async def test_prune_candidates_closed_dirty_lands_in_kept_with_loss_counts(monk
         ),
     )
 
-    async def fake_prunable(path, branch):
+    async def fake_prunable(path, branch, pr_index=None):
         return {
             "ok": False,
             "code": "closed_dirty",
@@ -1738,6 +1739,7 @@ async def test_prune_candidates_closed_dirty_lands_in_kept_with_loss_counts(monk
             "unmerged_commits": True,
         }
 
+    monkeypatch.setattr(fleet_state, "_build_pr_index", AsyncMock(return_value=None))
     monkeypatch.setattr(worktree_ops, "_prunable", fake_prunable)
     out = await worktree_ops._prune_candidates()
     assert [c["name"] for c in out["candidates"]] == []
@@ -1762,7 +1764,7 @@ async def test_prunable_passes_full_head_oid_to_pr_status_cached(monkeypatch, tm
     await worktree_ops._prunable(str(tmp_path), "feat")
 
     git.assert_awaited_once_with(str(tmp_path), "rev-parse", "HEAD")
-    cache.assert_awaited_once_with("feat", full_head)
+    cache.assert_awaited_once_with("feat", full_head, index=None)
 
 
 @pytest.mark.asyncio
@@ -1779,10 +1781,11 @@ async def test_prune_candidates_splits_and_skips_main(monkeypatch):
         ),
     )
 
-    async def fake_prunable(path, branch):
+    async def fake_prunable(path, branch, pr_index=None):
         ok = branch == "a"
         return {"ok": ok, "code": "merged" if ok else "active"}
 
+    monkeypatch.setattr(fleet_state, "_build_pr_index", AsyncMock(return_value=None))
     monkeypatch.setattr(worktree_ops, "_prunable", fake_prunable)
     out = await worktree_ops._prune_candidates()
     assert out["scanned"] == 2
@@ -4568,7 +4571,7 @@ async def test_prune_candidates_scans_concurrently(monkeypatch):
     peak = 0
     started = asyncio.Event()
 
-    async def fake_prunable(path, branch):
+    async def fake_prunable(path, branch, pr_index=None):
         nonlocal in_flight, peak
         in_flight += 1
         peak = max(peak, in_flight)
@@ -4583,6 +4586,7 @@ async def test_prune_candidates_scans_concurrently(monkeypatch):
             in_flight -= 1
 
     monkeypatch.setattr(repository, "_discover_worktrees", AsyncMock(return_value=wts))
+    monkeypatch.setattr(fleet_state, "_build_pr_index", AsyncMock(return_value=None))
     monkeypatch.setattr(worktree_ops, "_prunable", fake_prunable)
 
     out = await worktree_ops._prune_candidates()
@@ -4622,11 +4626,12 @@ async def test_prune_candidates_output_order_is_deterministic(monkeypatch):
         "/repo/wt-d": {"ok": False, "code": "active", "dirty": False},
     }
 
-    async def fake_prunable(path, branch):
+    async def fake_prunable(path, branch, pr_index=None):
         await asyncio.sleep(delays[path])
         return verdicts[path]
 
     monkeypatch.setattr(repository, "_discover_worktrees", AsyncMock(return_value=wts))
+    monkeypatch.setattr(fleet_state, "_build_pr_index", AsyncMock(return_value=None))
     monkeypatch.setattr(worktree_ops, "_prunable", fake_prunable)
 
     out = await worktree_ops._prune_candidates()
