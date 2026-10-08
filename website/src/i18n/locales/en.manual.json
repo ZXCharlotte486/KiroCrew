@@ -5610,7 +5610,7 @@
           "label": "Archive"
         },
         "config": {
-          "description": "{{productName}} and agent configuration — most edits save on change; Subagent Settings has its own Save",
+          "description": "{{productName}} and agent configuration — edits save on change",
           "label": "Config"
         },
         "debugTools": {
@@ -6076,12 +6076,14 @@
         "named_memory_stores_with_optional_per_store_embe": "Named memory stores with optional per-store embedding overrides. Unset fields inherit from the top-level memory section.",
         "named_workspace_directories_each_agent_binds_to": "Named workspace directories. Each agent binds to one workspace.",
         "save": "Save",
+        "subagent_save_note": "Changes here apply only when you press Save.",
         "saving": "Saving…",
-        "tool_call_budget_per_subagent_1_1000_default_100": "Tool-call budget per subagent (1–1000). Default: 1000.",
-        "max_age_for_pooled_processes_0_disables_expiry": "Max age for pooled processes. 0 disables expiry.",
-        "number_of_pre_spawned_processes_0_disables": "Number of pre-spawned processes. 0 disables.",
-        "agent_for_pool_processes_empty_uses_default_agent": "Agent for pool processes. Empty uses default agent.",
-        "warm_pool_description": "Pre-spawn ACP CLI processes for instant session start.",
+        "tool_call_budget_per_subagent_1_1000_default_100": "How many tool calls one subagent may make before it stops. A turn is one tool call (1–1000). Default: 100.",
+        "max_age_for_pooled_processes_0_disables_expiry": "Restart a waiting agent after this many seconds. 0 keeps it until a chat uses it.",
+        "number_of_pre_spawned_processes_0_disables": "How many agents to keep started and waiting. 0 turns this off.",
+        "agent_for_pool_processes_empty_uses_default_agent": "Which crewmate the waiting agents start as. Empty uses the default crewmate.",
+        "warm_pool_description": "Keep a few agents started in the background, so a new chat opens right away. Each value saves as soon as you change it.",
+        "warm_pool_save_note": "Each change here saves as soon as you make it.",
         "default_crewmate": "Default crewmate",
         "default_crewmate_failed": "Could not change the default crewmate",
         "default_crewmate_hint": "Which crewmate a new session starts as — the same setting the chat composer’s ★ (Default agent for new sessions) writes. Chats already open keep the one they started with.",
