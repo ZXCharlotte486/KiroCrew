@@ -17768,6 +17768,11 @@
     "keep_current": "현재 값 유지",
     "resolve_explanation": "현재 값을 유지합니다. 적용하면 결정을 기록하고 대기 중인 제안을 닫습니다.",
     "forget_count": "선택한 기억 잊기: {{count}}",
-    "retry_preview_page": "미리 보기 페이지 다시 시도"
+    "retry_preview_page": "미리 보기 페이지 다시 시도",
+    "restore_version": "이 버전 복원",
+    "restore_title": "이전 버전 복원",
+    "restore_hint": "복원하면 이 값이 새 버전으로 저장됩니다. 이전 버전은 기록에 남습니다.",
+    "restored": "복원된 버전",
+    "history_limit": "글로벌 메모리는 메모리마다 최근 20개의 기록된 변경만 보관합니다."
   }
 }

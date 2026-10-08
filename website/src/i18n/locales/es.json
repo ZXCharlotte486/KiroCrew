@@ -18314,6 +18314,11 @@
     "keep_current": "Conservar el valor actual",
     "resolve_explanation": "Conserva el valor actual. Aplicar registra esta decisión y cierra sus propuestas pendientes.",
     "forget_count": "Olvidar recuerdos seleccionados: {{count}}",
-    "retry_preview_page": "Reintentar página de vista previa"
+    "retry_preview_page": "Reintentar página de vista previa",
+    "restore_version": "Restaurar esta versión",
+    "restore_title": "Restaurar una versión anterior",
+    "restore_hint": "Al restaurar, este valor se guarda como una versión nueva. Las versiones anteriores siguen en el historial.",
+    "restored": "Versión restaurada",
+    "history_limit": "La memoria global solo conserva los 20 cambios registrados más recientes de cada memoria."
   }
 }

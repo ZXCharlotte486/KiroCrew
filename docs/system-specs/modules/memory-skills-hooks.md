@@ -5988,6 +5988,16 @@ journals `resolve` without changing content, provenance or vectors. Single-set
 previews bind pending proposal IDs; a newly arriving proposal forces a fresh
 review instead of being silently dismissed.
 
+Any earlier accepted snapshot the history still keeps can be restored. The
+`restore` operation names a `memory_revisions.id`; the server reads that
+snapshot's stored content itself, so a value the scrubbed history displays never
+reaches the store. The restore runs through the same preview/apply path as a
+correction, applies to exactly one record, and appends a new accepted revision
+journaled `restore`: nothing it goes back past is removed. A snapshot no longer
+kept for that record (another record's, or one V1 retention dropped)
+is refused with 404 `memory_revision_missing`. The detail view says V1 keeps only
+the latest 20 accepted changes per record.
+
 The records API answers display-safe content: a credential is a tag, an
 unscannable JSON payload egresses as `"[REDACTED: unscannable JSON payload]"`, and
 the scrub (`handlers/_shared._scrub_text`) re-runs after control-character stripping
@@ -6003,7 +6013,7 @@ value server side and only the matched span changes.
 Owner-only `POST /api/memory/bulk/preview` accepts one store and either explicit
 record identities with revisions (up to 500), or an all-matching filter with
 exclusions. Operations are literal text replacement, single-record correction,
-and forgetting. Replacement walks JSON string values; it never rewrites object
+restoring one record to a kept version, and forgetting. Replacement walks JSON string values; it never rewrites object
 keys, repository scope, provenance or classification. Preview validates the
 entire selection, returns counts and the first 25 changed before/after pairs,
 and signs the selector, operation, store and full selection digest. A selection

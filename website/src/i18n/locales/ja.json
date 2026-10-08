@@ -17768,6 +17768,11 @@
     "keep_current": "現在の値を保持",
     "resolve_explanation": "現在の値を保持します。適用すると判断を記録し、保留中の提案を終了します。",
     "forget_count": "選択したメモリを忘れる: {{count}}",
-    "retry_preview_page": "プレビューページを再試行"
+    "retry_preview_page": "プレビューページを再試行",
+    "restore_version": "このバージョンを復元",
+    "restore_title": "以前のバージョンを復元",
+    "restore_hint": "復元すると、この値が新しいバージョンとして保存されます。以前のバージョンは履歴に残ります。",
+    "restored": "復元されたバージョン",
+    "history_limit": "グローバルメモリーは各メモリーにつき最新 20 件の記録された変更のみを保持します。"
   }
 }

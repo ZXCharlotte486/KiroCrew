@@ -17768,6 +17768,11 @@
     "keep_current": "保留当前值",
     "resolve_explanation": "保留当前值。应用后记录此决定，并关闭其待处理提案。",
     "forget_count": "忘记所选记忆：{{count}}",
-    "retry_preview_page": "重试预览页面"
+    "retry_preview_page": "重试预览页面",
+    "restore_version": "恢复此版本",
+    "restore_title": "恢复较早的版本",
+    "restore_hint": "恢复会把这个值保存为新版本。较早的版本仍保留在历史中。",
+    "restored": "已恢复的版本",
+    "history_limit": "全局记忆只为每条记忆保留最近 20 次记录的更改。"
   }
 }

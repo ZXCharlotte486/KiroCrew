@@ -706,3 +706,31 @@ it('does not carry one store\'s saved filter into another store', async () => {
   expect(screen.getByRole('textbox', { name: 'Search memory' })).toHaveValue('')
   await waitFor(() => expect(api.memoryRecords).toHaveBeenLastCalledWith('member-review', { q: '', kind: 'all' }, 0, 50))
 })
+
+it.each([
+  { store: 'default', limited: true },
+  { store: 'member-review', limited: false },
+])('restores an earlier $store version through a server-side preview', async ({ store, limited }) => {
+  const current = record(0, { value_json: JSON.stringify('Boston'), text: 'Boston', metadata: { revision: 3 } })
+  records = [current]
+  const version = (id: number, revision: number, before: string | null, after: string, operation = 'correct') => ({ id, revision, base_revision: revision - 1, status: 'accepted', operation, source: 'user_explicit', before_json: before && JSON.stringify({ value_json: JSON.stringify(before) }), after_json: JSON.stringify({ value_json: JSON.stringify(after) }), metadata_json: '{}', created_at: '2026-09-07T12:00:00Z' })
+  api.memoryRecordHistory.mockResolvedValue({ current_revision: 4, has_more: false, entries: [version(4, 4, 'Boston', 'Seattle', 'restore'), version(3, 3, 'Portland', 'Boston'), version(1, 1, null, 'Seattle', 'create')] })
+  api.memoryEditPreview.mockResolvedValue({ preview_id: 'restore-preview', expires_at: '2026-12-31T12:00:00Z', matched_count: 1, changed_count: 1, unchanged_count: 0, entries: [{ before: current, after: record(0, { value_json: JSON.stringify('Seattle') }), operation: 'restore' }], preview_offset: 0, preview_limit: 25, preview_has_more: false, warnings: [] })
+  api.memoryEditApply.mockResolvedValue({ ok: true, changed_count: 1 })
+  mount(store)
+  fireEvent.click(await screen.findByRole('button', { name: 'View details' }))
+  const detail = screen.getByRole('dialog', { name: 'Memory details' })
+  const restored = (await within(detail).findByText('Restored version')).closest('details')!
+  // The current version has nothing to restore; every earlier kept one does.
+  expect(within(restored).queryByRole('button', { name: 'Restore this version' })).toBeNull()
+  expect(within(detail).getAllByRole('button', { name: 'Restore this version', hidden: true })).toHaveLength(2)
+  expect(!!within(detail).queryByText('Global memory keeps only the latest 20 recorded changes for each memory.')).toBe(limited)
+  const first = within(detail).getAllByText('Recorded change')[1].closest('details')!
+  fireEvent.click(within(first).getByText('Recorded change').closest('summary')!)
+  fireEvent.click(within(first).getByRole('button', { name: 'Restore this version' }))
+  const dialog = screen.getByRole('dialog', { name: 'Restore an earlier version' })
+  await waitFor(() => expect(api.memoryEditPreview).toHaveBeenCalledWith(store, { items: [{ kind: 'fact', id: current.id, revision: current.revision }] }, { type: 'restore', revision_id: 1 }))
+  expect(within(dialog).getByText('Restoring saves this value as a new version. Earlier versions stay in the history.')).toBeVisible()
+  fireEvent.click(await within(dialog).findByRole('button', { name: 'Apply changes (1)' }))
+  await waitFor(() => expect(api.memoryEditApply).toHaveBeenCalledWith(store, 'restore-preview'))
+})

@@ -8675,6 +8675,11 @@
     "keep_current": "Keep current value",
     "resolve_explanation": "Keep the current value. Applying records this decision and closes its pending proposals.",
     "forget_count": "Forget selected memories: {{count}}",
-    "retry_preview_page": "Retry preview page"
+    "retry_preview_page": "Retry preview page",
+    "restore_version": "Restore this version",
+    "restore_title": "Restore an earlier version",
+    "restore_hint": "Restoring saves this value as a new version. Earlier versions stay in the history.",
+    "restored": "Restored version",
+    "history_limit": "Global memory keeps only the latest 20 recorded changes for each memory."
   }
 }
