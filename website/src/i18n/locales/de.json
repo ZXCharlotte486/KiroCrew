@@ -14970,7 +14970,8 @@
         "app_lane_label": "App",
         "app_lane_title": "Die installierte Desktop-App. Ihre eigene Version, getrennt vom Dienst darunter.",
         "gateway_lane_label": "Gateway",
-        "gateway_lane_title": "Der Hintergrunddienst, der Ihre Agenten ausführt und dieses Dashboard bereitstellt. Die Branch- und Commit-Chips zeigen seinen Build."
+        "gateway_lane_title": "Der Hintergrunddienst, der Ihre Agenten ausführt und dieses Dashboard bereitstellt. Die Branch- und Commit-Chips zeigen seinen Build.",
+        "update_refused_dirty_worktree": "Das Update wurde angehalten, um deine lokalen Änderungen zu schützen: Dieser Checkout hat nicht committete Änderungen ({{changed}}). Committe oder stashe sie und versuche es dann erneut. Um alles zu stashen, führe den Befehl unten im Checkout aus."
       },
       "botChannelPanel": {
         "allowed_user_ids": "Erlaubte Benutzer-IDs",
