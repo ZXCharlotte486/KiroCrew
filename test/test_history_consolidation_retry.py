@@ -1147,9 +1147,7 @@ class TestAttemptCap:
         log = _seed_log(tmp_path)
         c = _make_consolidator(log)
         seen: list[tuple[str, int, str]] = []
-        c.on_abandoned = lambda key, count, reason, char_count=0: seen.append(
-            (key, count, reason)
-        )
+        c.on_abandoned = lambda key, count, reason, char_count=0: seen.append((key, count, reason))
         with history_mod.allow_on_loop_persist():
             log.update_metadata(
                 KEY,
@@ -1169,9 +1167,7 @@ class TestAttemptCap:
         log = _seed_log(tmp_path)
         c = _make_consolidator(log)
         seen: list[tuple[str, int, str]] = []
-        c.on_abandoned = lambda key, count, reason, char_count=0: seen.append(
-            (key, count, reason)
-        )
+        c.on_abandoned = lambda key, count, reason, char_count=0: seen.append((key, count, reason))
 
         with patch.object(c, "_call_llm", AsyncMock(return_value=None)):
             await c._consolidate(KEY, include_history=True)

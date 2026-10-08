@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from kiro_crew import history as history_mod
+from kiro_crew import history_consolidation as history_consolidation_mod
 from kiro_crew import memory_stores
 from kiro_crew.history import (
     _CONSOLIDATION_MAX_ATTEMPTS,
@@ -29,6 +30,12 @@ from kiro_crew.history import (
     _consolidation_chunk,
     _fmt_message,
 )
+from kiro_crew.history_consolidation import (
+    _head_exceeds_budget,
+    _prompt_rows,
+    _slice_head_for_budget,
+)
+from kiro_crew.image_refs import STRIPPED_IMAGE_MARKER
 
 KEY = "dashboard:chat-bounds"
 
@@ -396,9 +403,9 @@ class TestABoundedAttemptIsNotReleasedByGrowth:
             "the head drains slice-by-slice and the marker moves past it exactly "
             "once, after the final slice is abandoned"
         )
-        assert not meta.get("consolidation_sub_offset"), (
-            "the sub-offset is cleared once the marker moves past the whole head"
-        )
+        assert not meta.get(
+            "consolidation_sub_offset"
+        ), "the sub-offset is cleared once the marker moves past the whole head"
         assert log.unconsolidated_count(KEY), "the tail behind the head must survive"
 
     @pytest.mark.asyncio
@@ -428,9 +435,9 @@ class TestABoundedAttemptIsNotReleasedByGrowth:
         # The marker has NOT moved past the message — only the sub-offset advanced.
         assert meta.get("last_consolidated", 0) == 0, "the whole head was not abandoned"
         first_slice_end = int(meta["consolidation_sub_offset"])
-        assert 0 < first_slice_end < _CONSOLIDATION_PROMPT_BUDGET_CHARS * 2, (
-            "the sub-offset advanced past exactly the first slice"
-        )
+        assert (
+            0 < first_slice_end < _CONSOLIDATION_PROMPT_BUDGET_CHARS * 2
+        ), "the sub-offset advanced past exactly the first slice"
         # The abandoned-slice budget was cleared, so the next slice starts fresh.
         assert log.consolidation_retry_state(KEY, 1)[0] == 0
 
@@ -455,17 +462,17 @@ class TestABoundedAttemptIsNotReleasedByGrowth:
         head = log.snapshot_for_consolidation(KEY)[0][0]
         expected_slice, start, _end, _last = _slice_head_for_budget(head, first_slice_end)
         assert start == first_slice_end, "the second slice begins at the durable sub-offset"
-        assert expected_slice["content"] and expected_slice["content"] in captured["prompt"], (
-            "the second pass resumes slicing from the durable sub-offset"
-        )
-        assert len(expected_slice["content"]) < _CONSOLIDATION_PROMPT_BUDGET_CHARS, (
-            "a resumed slice's content is within one budget, not the whole head"
-        )
+        assert (
+            expected_slice["content"] and expected_slice["content"] in captured["prompt"]
+        ), "the second pass resumes slicing from the durable sub-offset"
+        assert (
+            len(expected_slice["content"]) < _CONSOLIDATION_PROMPT_BUDGET_CHARS
+        ), "a resumed slice's content is within one budget, not the whole head"
         from kiro_crew.history import _fmt_message
 
-        assert len(_fmt_message(expected_slice)) <= _CONSOLIDATION_PROMPT_BUDGET_CHARS, (
-            "the rendered slice (content plus envelope) fits the budget"
-        )
+        assert (
+            len(_fmt_message(expected_slice)) <= _CONSOLIDATION_PROMPT_BUDGET_CHARS
+        ), "the rendered slice (content plus envelope) fits the budget"
 
 
 class TestSubChunkingDrainsAnOversizedHead:
@@ -532,9 +539,7 @@ class TestSubChunkingDrainsAnOversizedHead:
 
         # One successful slice advances the durable sub-offset without moving the
         # message marker.
-        with patch.object(
-            c, "_call_llm", AsyncMock(return_value={"history_entry": "e"})
-        ):
+        with patch.object(c, "_call_llm", AsyncMock(return_value={"history_entry": "e"})):
             with history_mod.allow_on_loop_persist():
                 log.update_metadata(KEY, {"consolidation_retry_at": 0.0})
             await c._consolidate(KEY, include_history=True)
@@ -756,3 +761,133 @@ class TestTheReceiptDescribesThePromptedSpan:
         assert 0 < marked < before, "fixture must exercise a bounded prompt"
         assert kwargs["source_total"] == marked, "the receipt must not claim the whole snapshot"
         assert len(kwargs["messages"]) == marked
+
+
+class TestNoticeRowsDoNotSkipSlicing:
+    """An oversized head next to a display-only row must still be sliced.
+
+    ``_consolidation_chunk`` carries display-only rows (a ``notice`` such as an
+    AutoNudge) inside the prefix even though no prompt renders them, so a chunk
+    holding one oversized head plus a notice is two rows long. A slicing guard
+    keyed on ``len(chunk)`` would skip slicing for that shape, prompt the whole
+    head, and abandon the entire message at the attempt cap WITHOUT extraction —
+    the data loss the sub-chunking path exists to prevent. The guard must key on
+    the PROMPTED rows instead.
+    """
+
+    def _notice(self, content: str) -> dict:
+        return {"ts": "2026-09-09T12:00:00", "role": "notice", "content": content, "tools": []}
+
+    def test_a_notice_after_an_oversized_head_leaves_one_prompt_row(self) -> None:
+        head = _msg("x" * (_CONSOLIDATION_PROMPT_BUDGET_CHARS * 3), "assistant")
+        chunk = _consolidation_chunk([head, self._notice("AutoNudge: keep going")])
+        # The chunk keeps the notice, so it is two rows long...
+        assert len(chunk) == 2
+        # ...but exactly one row is rendered into a prompt, and it is the head.
+        rows = _prompt_rows(chunk)
+        assert len(rows) == 1
+        assert _head_exceeds_budget(rows[0])
+
+    def test_a_notice_before_an_oversized_head_leaves_one_prompt_row(self) -> None:
+        head = _msg("x" * (_CONSOLIDATION_PROMPT_BUDGET_CHARS * 3), "assistant")
+        chunk = _consolidation_chunk([self._notice("AutoNudge: keep going"), head])
+        assert len(chunk) == 2
+        rows = _prompt_rows(chunk)
+        assert len(rows) == 1
+        assert _head_exceeds_budget(rows[0])
+
+
+class TestASliceRendersWithinTheBudget:
+    """``_slice_head_for_budget`` must render within the budget, not just slice raw.
+
+    ``_fmt_message`` runs ``strip_image_refs``, which replaces each image
+    reference with a longer content-free marker. A slice sized against the raw
+    content length can therefore render OVER the budget once that expansion
+    applies — handing a provider the over-ceiling prompt the slicing avoids.
+    """
+
+    def test_an_image_ref_dense_head_slices_within_the_rendered_budget(self, monkeypatch) -> None:
+        # Shrink the budget to a few KB so the image-ref-dense fixture stays
+        # small. ``strip_image_refs`` (run by ``_fmt_message``) is superlinear in
+        # the number of references, so a budget-sized fixture at the real 64 KB
+        # ceiling means thousands of refs and a single render that runs for tens
+        # of seconds — enough to trip the suite's per-test timeout. The slicing
+        # behaviour under test is budget-relative, so a small budget exercises it
+        # identically. ``_slice_head_for_budget`` and ``_head_exceeds_budget``
+        # both read this module global at call time.
+        budget = 2048
+        monkeypatch.setattr(
+            history_consolidation_mod,
+            "_CONSOLIDATION_PROMPT_BUDGET_CHARS",
+            budget,
+        )
+        ref = "![](/a.png)\n"
+        assert len(STRIPPED_IMAGE_MARKER) > len(
+            ref.rstrip("\n")
+        ), "fixture only exercises expansion if the marker is longer than the ref"
+        content = ref * (budget // len(ref) + 50)
+        head = _msg(content, "assistant")
+        # The raw content is over the budget, so this is a genuine oversized head.
+        assert _head_exceeds_budget(head)
+        sliced, start, end, _is_last = _slice_head_for_budget(head, 0)
+        # The slice must make progress and render within the budget despite the
+        # image-reference expansion. A raw slice sized at ``budget - envelope``
+        # would render larger than the budget once each ref expands, so a slice
+        # that renders within the budget proves the rendered-size shrink engaged.
+        assert end > start
+        assert len(_fmt_message(sliced)) <= budget
+
+
+class TestARotationDiscardsAStaleSubOffsetFromTheCap:
+    """The attempt cap must read the sub-offset through its generation stamp.
+
+    A rotation resets ``last_consolidated`` and bumps ``rotation_generation`` but
+    leaves ``consolidation_sub_offset`` at its old nonzero value. Comparing the
+    attempt's stamped sub-offset against that RAW value reads every failure on
+    the new span as a different slice and resets the cap each time, so the
+    abandon path is never reached. Reading it through
+    ``_sub_offset_for_generation`` makes the comparison see the ``0`` the slicer
+    uses for the new generation, so the cap holds across failures.
+    """
+
+    def test_a_stale_sub_offset_from_a_prior_generation_does_not_reset_the_cap(
+        self, tmp_path
+    ) -> None:
+        log = ConversationLog(base_dir=tmp_path / "sessions")
+        log.init()
+        # Post-rotation: generation 2, marker reset to 0, but the raw sub-offset
+        # still holds generation 1's 5000. The attempt was charged on the new
+        # generation at sub-offset 0 (re-sliced from the head's start).
+        meta = {
+            "rotation_generation": 2,
+            "last_consolidated": 0,
+            "consolidation_sub_offset": 5000,
+            "consolidation_sub_offset_generation": 1,
+            "consolidation_attempts_generation": 2,
+            "consolidation_attempts_offset": 0,
+            "consolidation_attempts_sub_offset": 0,
+        }
+        # The generation-honoured read discards the stale offset...
+        assert ConversationLog._sub_offset_for_generation(meta, 2) == 0
+        # ...so the attempt still describes the current span and the cap holds.
+        assert log._attempts_describe_current_span(meta, None) is True
+
+    def test_an_advanced_sub_offset_in_the_current_generation_resets_the_cap(
+        self, tmp_path
+    ) -> None:
+        log = ConversationLog(base_dir=tmp_path / "sessions")
+        log.init()
+        # Same generation, but an earlier slice succeeded and advanced the
+        # durable sub-offset past where this attempt was charged — a genuinely
+        # different slice, so the cap SHOULD reset.
+        meta = {
+            "rotation_generation": 2,
+            "last_consolidated": 0,
+            "consolidation_sub_offset": 5000,
+            "consolidation_sub_offset_generation": 2,
+            "consolidation_attempts_generation": 2,
+            "consolidation_attempts_offset": 0,
+            "consolidation_attempts_sub_offset": 0,
+        }
+        assert ConversationLog._sub_offset_for_generation(meta, 2) == 5000
+        assert log._attempts_describe_current_span(meta, None) is False
