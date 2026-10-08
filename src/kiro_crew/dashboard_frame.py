@@ -467,8 +467,13 @@ def read_payload(
     stale: bool = False,
     missing: list[str] | tuple[str, ...] = (),
     written_at: Mapping[str, str] | None = None,
+    subject: str = "crewmate",
 ) -> dict[str, Any]:
     """The object the page sees as ``window.kirocrew``.
+
+    ``subject`` says whose page this is -- ``crewmate`` or ``session`` -- so a template
+    shared by both can word its own heading for the reader it is drawn for. Any other
+    value is read as ``crewmate``.
 
     ONE builder for the initial document and for every refill, so the two cannot
     describe the same read differently -- which is the bug a reader cannot detect,
@@ -491,6 +496,7 @@ def read_payload(
         "stale": bool(stale),
         "missing": sorted(missing),
         "written_at": dict(written_at or {}),
+        "subject": "session" if subject == "session" else "crewmate",
     }
 
 

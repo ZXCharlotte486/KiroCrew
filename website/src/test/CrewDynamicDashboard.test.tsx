@@ -72,7 +72,7 @@ function page(over: Record<string, unknown> = {}) {
 
 function mount() {
   return renderWithProviders(
-    <CrewDynamicDashboard slug="oncall" member="oncall" displayName="On Call" />,
+    <CrewDynamicDashboard target={{ kind: 'member', slug: 'oncall', member: 'oncall' }} displayName="On Call" />,
   )
 }
 
@@ -98,6 +98,24 @@ describe('CrewDynamicDashboard', () => {
     mount()
     await waitFor(() => expect(read).toHaveBeenCalledWith('oncall', 'oncall'))
     expect(await screen.findByTestId('crew-dashboard-frame')).toBeInTheDocument()
+  })
+
+  it('reads a root session\'s own page by its slot, through the same frame', async () => {
+    const member = vi.spyOn(api, 'memberDashboard').mockResolvedValue(page())
+    const session = vi.spyOn(api, 'sessionDashboard').mockResolvedValue(page())
+    renderWithProviders(<CrewDynamicDashboard target={{ kind: 'session', slot: 'chat-7' }} displayName="Root" />)
+    await waitFor(() => expect(session).toHaveBeenCalledWith('chat-7'))
+    expect(member).not.toHaveBeenCalled()
+    expect(await screen.findByTestId('crew-dashboard-iframe')).toHaveAttribute('sandbox', 'allow-scripts')
+  })
+
+  it('re-reads a session page when the gateway names its slot', async () => {
+    const session = vi.spyOn(api, 'sessionDashboard').mockResolvedValue(page())
+    const { queryClient } = renderWithProviders(<CrewDynamicDashboard target={{ kind: 'session', slot: 'chat-7' }} displayName="Root" />)
+    await waitFor(() => expect(session).toHaveBeenCalledTimes(1))
+    handleDashboardMoved(queryClient, { slot: 'chat-8' })
+    handleDashboardMoved(queryClient, { slot: 'chat-7' })
+    await waitFor(() => expect(session).toHaveBeenCalledTimes(2))
   })
 
   it('shows the page the read resolved, in a frame granting scripts and nothing else', async () => {
@@ -199,7 +217,7 @@ describe('CrewDynamicDashboard', () => {
     await waitFor(() => expect(retrySpy).toHaveBeenCalled())
     // The re-mint is what the component must notice, so re-render to let it read the
     // new url the retry produced.
-    rerender(<CrewDynamicDashboard slug="oncall" member="oncall" displayName="On Call" />)
+    rerender(<CrewDynamicDashboard target={{ kind: 'member', slug: 'oncall', member: 'oncall' }} displayName="On Call" />)
     window.dispatchEvent(new MessageEvent('message', { data: { type: READY_MESSAGE_TYPE } }))
     await waitFor(() =>
       expect(screen.queryByTestId('crew-dashboard-kept-band')).not.toBeInTheDocument(),

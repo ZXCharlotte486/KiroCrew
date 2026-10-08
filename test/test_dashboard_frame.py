@@ -268,6 +268,8 @@ class TestTheComposedDocument:
             # Empty rather than absent: a page reads this map unconditionally, and a
             # missing key would make a template branch on whether the host is new.
             "written_at": {},
+            # Whose page it is; a crewmate's unless the host says otherwise.
+            "subject": "crewmate",
         }
 
     def test_the_refill_replaces_the_global_wholesale(self) -> None:

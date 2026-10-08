@@ -1298,8 +1298,7 @@ export default function SidePanel({
                   to load after main.tsx's preload-reload heal declined would
                   otherwise reject up to the ROUTE boundary and replace the whole
                   chat page with an error card. The fallback is the shared error
-                  surface, not nothing, so the tab says why it is empty; the dock
-                  above the composer keeps working from its own chunk. */}
+                  surface, not nothing, so the tab says why it is empty. */}
               {/* No hand-off: the adjacent chat composer holds unsent text and the
                   panel's own answer drafts live in this tab. */}
               <ErrorBoundary scope="command-center" fallback={<ErrorNotice className="m-3" message={i18nT('commandCenter.panel_load_failed')} />}>

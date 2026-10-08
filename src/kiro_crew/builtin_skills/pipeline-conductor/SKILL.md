@@ -12,11 +12,10 @@ clean up. Every rule below closes a named failure mode.
 
 ## What you track: two columns
 
-For long runs, load the `artifacts` skill's Dynamic Dashboard contract. An
-authorized descendant may publish a `task-dashboard` HTML artifact tailored
-to this pipeline and update the same slug at milestones. Design is free; the
-two facts below remain the source of truth. The page is not a second status
-store, does not authorize reading more worker context, and cannot approve tools.
+A root conductor's side panel shows its own Dynamic Dashboard, folded from this
+session's work ledger; the two facts below remain the source of truth. The page
+is not a second status store, does not authorize reading more worker context,
+and cannot approve tools.
 The host's native approval inbox names each waiting session, including Normal
 permission mode. Never broaden your role or change permission mode to publish.
 

@@ -482,7 +482,7 @@
   <div class="pr-head">
     <div class="pr-titles">
       <div>
-        <div class="pr-eyebrow">What this crewmate is doing</div>
+        <div class="pr-eyebrow" id="pr-eyebrow">What this crewmate is doing</div>
         <div class="pr-title" id="pr-title">Project report</div>
         <!-- Whether the page is being fed, and as of when. Under the title rather
              than in a footer: it qualifies every number above it. -->
@@ -2566,6 +2566,13 @@
   // ---------------------------------------------------------------- render
 
   function render() {
+    //: The host says whose page this is. One template serves a crewmate's tab and a
+    //: root session's side panel, so the heading names the reader's own subject.
+    var eyebrow = document.getElementById('pr-eyebrow');
+    if (eyebrow) {
+      eyebrow.textContent = (window.kirocrew || {}).subject === 'session'
+        ? 'What this session is doing' : 'What this crewmate is doing';
+    }
     var list = streams();
     plots = [];
     var found = null;

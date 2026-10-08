@@ -4476,9 +4476,7 @@ Build it from theme variables, readable at 320px wide, with motion off under
 `prefers-reduced-motion`, and give every link
 `target="_blank" rel="noopener noreferrer"`. Put the answers you need from them
 in an `[OPTIONS: ...]` line or `ask_question` under the widget, never as buttons
-drawn in HTML, and keep each answer a few words long so it is read in full. For a goal that runs more than one round, also keep one
-`task-dashboard` artifact and update that same slug at each milestone: the
-widget is the summary, the artifact is the full board.
+drawn in HTML, and keep each answer a few words long so it is read in full.
 
 ## If a conductor dispatched you
 

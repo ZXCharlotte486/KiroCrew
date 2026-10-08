@@ -333,9 +333,11 @@ export function useWebSocket() {
             break
           }
           case 'dashboard_value_written':
-            // A crewmate wrote one of its own dashboard fields mid-turn. The frame
-            // carries only {slug}; the tab's refetch re-asks the server, which
-            // re-composes the page and re-checks ownership.
+          case 'dashboard_instance_changed':
+            // A crewmate or a root session wrote one of its own dashboard fields, or
+            // changed its page, mid-turn. The frame carries only {slug} or {slot};
+            // the tab's refetch re-asks the server, which re-composes the page and
+            // re-checks ownership.
             handleDashboardMoved(queryClient, data)
             break
           case 'notification_ack':

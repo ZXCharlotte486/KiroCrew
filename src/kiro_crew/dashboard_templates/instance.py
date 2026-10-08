@@ -43,14 +43,17 @@ to see, not a shape this module will write.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
+import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Iterator, Mapping
+from urllib.parse import quote
 
 from kiro_crew import dashboard_frame
 from kiro_crew.atomic_write import atomic_write, fsync_dir
@@ -79,6 +82,7 @@ __all__ = [
     "MAX_RETAINED_VERSIONS",
     "RENDERABLE_SOURCES",
     "SCHEMA_VERSION",
+    "SESSION_KEY_PREFIX",
     "STATE_EMPTY",
     "STATE_ERROR",
     "STATE_LIVE",
@@ -94,9 +98,12 @@ __all__ = [
     "edit",
     "history",
     "instance_dir",
+    "is_session_key",
     "preview_url",
     "read",
     "rollback",
+    "session_instance_key",
+    "session_preview_url",
     "stage_preview",
     "staged_preview",
     "versions",
@@ -161,6 +168,12 @@ MAX_HISTORY_ROWS: Final[int] = 50
 #: match drops a real change with nothing raised.
 ENTRY_TYPE: Final[str] = DASHBOARD_INSTANCE_ENTRY_TYPE
 
+#: The prefix of a ROOT session's store key. See :func:`session_instance_key`.
+SESSION_KEY_PREFIX: Final[str] = "session:"
+_SESSION_DIGEST_LEN: Final[int] = 32
+_SESSION_DIGEST_RE: Final[re.Pattern[str]] = re.compile(rf"[0-9a-f]{{{_SESSION_DIGEST_LEN}}}")
+_SESSION_DASHBOARDS_DIR: Final[str] = "session-dashboards"
+
 _RECORD_FILE: Final[str] = "instance.json"
 _HISTORY_FILE: Final[str] = "history.json"
 _VERSIONS_SUBDIR: Final[str] = "versions"
@@ -224,14 +237,45 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def instance_dir(slug: str) -> Path:
-    """Where one crewmate's dashboard instance lives.
+def session_instance_key(slot_key: str) -> str:
+    """The store key one ROOT session's dashboard instance is filed under.
 
-    Under the member's own space, beside everything else keyed by that slug, so a
-    crewmate removed from the roster takes its dashboard with it.
+    Every function in this module takes a store key where it says ``slug``: a member
+    slug for a crewmate's page, or this key for a session's. The prefix carries a
+    ``:``, which the member slug grammar refuses, so no crewmate's slug can ever name
+    a session's directory or the other way round.
+
+    A digest of the slot key rather than the key itself, because a slot key is not a
+    path segment: channel slots carry dots, and nothing here should have to argue
+    that a given key cannot climb out of the directory it names.
+    """
+    if not slot_key:
+        raise InstanceError("a session dashboard instance needs a slot key")
+    digest = hashlib.sha256(slot_key.encode("utf-8", "replace")).hexdigest()[:_SESSION_DIGEST_LEN]
+    return f"{SESSION_KEY_PREFIX}{digest}"
+
+
+def is_session_key(slug: str) -> bool:
+    """Whether *slug* is a session's store key rather than a member slug."""
+    return slug.startswith(SESSION_KEY_PREFIX)
+
+
+def instance_dir(slug: str) -> Path:
+    """Where one dashboard instance lives, for a crewmate or for a root session.
+
+    A crewmate's is under the member's own space, beside everything else keyed by that
+    slug, so a crewmate removed from the roster takes its dashboard with it. A session's
+    is under one directory of session pages, named by the digest
+    :func:`session_instance_key` made; a key whose digest is not exactly that shape is
+    refused rather than joined onto a path.
     """
     if not slug:
         raise InstanceError("a dashboard instance needs a member slug")
+    if is_session_key(slug):
+        digest = slug[len(SESSION_KEY_PREFIX) :]
+        if not _SESSION_DIGEST_RE.fullmatch(digest):
+            raise InstanceError("a session dashboard key must come from session_instance_key")
+        return data_home() / _SESSION_DASHBOARDS_DIR / digest
     return data_home() / "members" / slug / "dashboard"
 
 
@@ -919,6 +963,15 @@ def preview_url(slug: str) -> str:
     capability token would be a second credential for data its holder can already read.
     """
     return f"/api/members/{slug}/dashboard?preview=1"
+
+
+def session_preview_url(slot_key: str) -> str:
+    """:func:`preview_url` for a root session's page, which is read by its slot.
+
+    The store key is a one-way digest, so the link is built from the slot key the
+    caller already holds rather than recovered from the key.
+    """
+    return f"/api/chat/slots/{quote(slot_key, safe='')}/dashboard?preview=1"
 
 
 @dataclass(frozen=True)
