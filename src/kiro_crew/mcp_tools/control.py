@@ -16,7 +16,6 @@ every existing patch site.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -146,18 +145,6 @@ def _prefers_structured_arming() -> bool:
     tool list for that session's life -- the same limitation
     ``mcp_tools/browser.py`` records for ``dashboard.use_builtin_browser``.
 
-    Skipped entirely when an event loop is running, the same rule
-    ``mcp_tools/spawn.py::_agent_roster_hint`` applies for the same caller: a
-    running loop means this is NOT the stdio server but
-    ``mcp_discovery._managed_tools_in_process``, calling ``_list_tools()`` from
-    ``async def probe_server`` on the gateway's loop. That caller keeps only tool
-    NAMES -- it returns ``t.get("name")`` per entry and discards every
-    description -- so reading config there could not change anything it uses, and
-    the read is skipped rather than charged to the loop. The process that
-    actually serves ``tools/list`` to a model is ``mcp_shared.run_mcp_stdio_loop``,
-    a plain select/readline loop that never imports asyncio, so no loop is running
-    there and the preference IS read.
-
     Fails to the OFF position on any error: off is the shipped behaviour, and a
     config a gateway cannot parse must not silently re-point every arming
     decision it is about to advise on. The catch stays broad because this runs
@@ -166,12 +153,6 @@ def _prefers_structured_arming() -> bool:
     narrowed, which is what keeps a defect here discoverable rather than
     concealed.
     """
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        pass  # no loop: the stdio server, the one build whose text reaches a model
-    else:
-        return False
     try:
         return bool(KiroCrewConfig.load().monitoring.prefer_structured_arming)
     except Exception:
@@ -184,16 +165,26 @@ def _ending_clause() -> str:
     return ending_phrase()
 
 
-def schemas() -> list[dict[str, Any]]:
-    """Descriptors for the control tools."""
-    prefer_structured = _prefers_structured_arming()
-    # In-process discovery keeps only names; never read disk on its event loop.
-    # A failed descriptive read must not withdraw every control tool. Actual
-    # invocation still validates the current policy at the mutation boundary.
+def schemas(*, names_only: bool = False) -> list[dict[str, Any]]:
+    """Descriptors for the control tools.
+
+    ``names_only`` is set by the in-process discovery read (via
+    ``mcp_tools.build_tool_names``), which keeps only tool NAMES and discards
+    every description. Under it the two reads that exist solely to shape a
+    description -- the structured-arming preference and the monitor runtime
+    ceiling, both config reads -- are skipped, so a names-only caller performs no
+    on-loop disk work for text it throws away. The returned names and their order
+    are unchanged. This is why neither read needs a ``get_running_loop`` guard of
+    its own: the names path never reaches them, and the full-descriptor path (the
+    stdio server serving a model) always wants the live values.
+    """
+    prefer_structured = False if names_only else _prefers_structured_arming()
+    # A failed descriptive read must not withdraw every control tool, and the
+    # actual invocation still validates the current policy at the mutation
+    # boundary -- so a default here is safe. The names-only path skips the read
+    # outright (its result would be discarded).
     runtime_ceiling = DEFAULT_RUNTIME_CEILING_SECS
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
+    if not names_only:
         try:
             runtime_ceiling = runtime_ceiling_secs()
         except Exception:

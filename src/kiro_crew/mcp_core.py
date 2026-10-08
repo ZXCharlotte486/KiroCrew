@@ -65,7 +65,7 @@ from kiro_crew.mcp_shared import (
     spawned_without_gateway_identity,
 )
 from kiro_crew.mcp_tool_titles import with_titles
-from kiro_crew.mcp_tools import build_tool_list, dispatch
+from kiro_crew.mcp_tools import build_tool_list, build_tool_names, dispatch
 from kiro_crew.members import record_activity
 from kiro_crew.memory_stores import UnknownMemoryStore
 from kiro_crew.messaging.link import is_legacy_slack_key, legacy_key
@@ -492,6 +492,21 @@ def _list_tools() -> list[dict[str, Any]]:
     entry point kiro-cli and in-process discovery both read.
     """
     return with_titles(CORE_MCP_SERVER, build_tool_list())
+
+
+def _list_tool_names() -> list[str]:
+    """Tool NAMES only, without assembling descriptions.
+
+    The names-only read path ``mcp_discovery._managed_tools_in_process`` prefers
+    when it keeps only names. It returns exactly the names ``_list_tools`` would,
+    in the same order, but ``build_tool_names`` takes the ``names_only`` path so
+    the two descriptions that reach for a live value (the sub-agent cap and
+    agents-directory scan in ``mcp_tools.spawn``, the config reads in
+    ``mcp_tools.control``) are never performed. ``with_titles`` is intentionally
+    not applied: it only decorates descriptions, which a names-only caller
+    discards.
+    """
+    return build_tool_names()
 
 
 def _internal_secret() -> str:

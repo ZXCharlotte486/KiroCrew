@@ -1400,10 +1400,20 @@ def _managed_tools_in_process(name: str) -> list[str] | None:
     ``agent.sandbox_allow_unsandboxed_exec`` opt-in for a read-only listing, or
     exempt an agent-writable package from the sandbox. This needs neither.
 
+    This caller keeps only NAMES, so it prefers a module's ``_list_tool_names()``
+    when it offers one: a names-only read that never assembles descriptions, so a
+    description reaching for a live value (a directory scan, a config read) never
+    runs here. That is what replaced the per-builder ``get_running_loop`` skips —
+    the names-only path simply does not reach those reads, rather than each
+    builder detecting this caller and opting out. A module without the names-only
+    entry point falls back to extracting names from its full ``_list_tools()``;
+    among the managed set only ``kirocrew-core`` carries live-valued
+    descriptions, and it provides ``_list_tool_names()``.
+
     Imported lazily: these modules pull in the validation/artifacts graph, which
-    cannot be imported at this module's import time (circular). ``_list_tools`` is
-    a pure read of schemas plus config — no I/O of its own, no side effects, and
-    cheap enough for a discovery cycle.
+    cannot be imported at this module's import time (circular). The names-only
+    read is a pure read of the static tool set — no I/O of its own, no side
+    effects, and cheap enough for a discovery cycle.
 
     Returns ``None`` when *name* is not managed or the read fails, so the caller
     falls back to the ordinary spawn-and-handshake path rather than reporting a
@@ -1416,6 +1426,12 @@ def _managed_tools_in_process(name: str) -> list[str] | None:
         return None
     try:
         module = importlib.import_module(module_name)
+        names_only = getattr(module, "_list_tool_names", None)
+        if callable(names_only):
+            tool_names = names_only()
+            if isinstance(tool_names, list):
+                return [n for n in tool_names if isinstance(n, str) and n]
+            return None
         tools = module._list_tools()
     except Exception:
         logger.debug("in-process tool read failed for %s; will probe", name, exc_info=True)
