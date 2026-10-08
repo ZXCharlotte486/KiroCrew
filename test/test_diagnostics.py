@@ -96,6 +96,69 @@ def test_collect_bundle_redacts_and_zips(tmp_path, monkeypatch):
     assert manifest["note"] == "every message fails"
 
 
+def test_absolute_paths_are_redacted_in_every_text_member(tmp_path, monkeypatch):
+    """Absolute host paths must not survive in the bundle's text members.
+
+    The bundle's stated destination is a public issue, and a log line or the
+    ``versions.txt`` ``data_home`` field carries the home-directory login
+    verbatim unless the scrubber runs the path pass. Drive the collector end to
+    end and assert no absolute home path reaches any text member, including the
+    generated ``versions.txt``.
+    """
+    home = tmp_path / "home"
+    _isolate(monkeypatch, home)
+    leak_posix = "/home/user/.kiro/crew/vaults/v1"
+    leak_windows = "C:/Users/user/AppData/Local/KiroCrew/x.log"
+    (home / "gateway.log").write_text(
+        f"open failed: {leak_posix}\nwin path {leak_windows}\na perfectly normal log line\n"
+    )
+
+    r = diagnostics.collect_bundle(output_dir=tmp_path / "out")
+
+    with zipfile.ZipFile(r.zip_path) as z:
+        gw = z.read("gateway.log").decode()
+        versions = z.read("versions.txt").decode()
+        manifest = json.loads(z.read("manifest.json"))
+
+    for member, text in (("gateway.log", gw), ("versions.txt", versions)):
+        assert leak_posix not in text, f"posix path survived in {member}"
+        assert "/home/user" not in text, f"posix login segment survived in {member}"
+        assert leak_windows not in text, f"windows path survived in {member}"
+        assert "Users/user" not in text, f"windows login segment survived in {member}"
+    # The data_home value in versions.txt resolved to the temp home, which is an
+    # absolute path and must likewise be redacted.
+    assert str(home) not in versions, "data_home absolute path survived in versions.txt"
+    assert "a perfectly normal log line" in gw
+    # Path redactions are counted per member and rolled into the manifest total.
+    assert r.redaction_summary["gateway.log"] >= 2
+    assert r.redaction_summary["versions.txt"] >= 1
+    assert manifest["total_redactions"] == r.total_redactions
+
+
+def test_credential_after_a_path_prefix_is_still_redacted(tmp_path, monkeypatch):
+    """A header sitting right after a ``file:line:`` prefix must still be redacted.
+
+    The path pass runs to the next whitespace, so a ``grep``-shaped line
+    (``/p/req.txt:12:Authorization: Basic …``) would let the path swallow the
+    header's anchor if the path pass ran first. The bundle scrub runs the path
+    pass LAST, so the credential is removed before the path is collapsed.
+    """
+    home = tmp_path / "home"
+    _isolate(monkeypatch, home)
+    secret = "dXNlcjpwYXNzd29yZA=="
+    (home / "gateway.log").write_text(
+        f"/home/user/app/req.txt:12:Authorization: Basic {secret}\nplain\n"
+    )
+
+    r = diagnostics.collect_bundle(output_dir=tmp_path / "out")
+
+    with zipfile.ZipFile(r.zip_path) as z:
+        gw = z.read("gateway.log").decode()
+    assert secret not in gw, "credential survived: path pass swallowed the header anchor"
+    assert "/home/user" not in gw, "absolute path survived"
+    assert "plain" in gw
+
+
 def test_authorization_scheme_credential_fully_redacted(tmp_path, monkeypatch):
     """A non-Bearer scheme + raw token must be fully redacted (not just the scheme)."""
     home = tmp_path / "home"

@@ -43,6 +43,7 @@ from kiro_crew.security import (
     is_sensitive_path,
     redact_credentials,
     redact_exfiltration_urls,
+    redact_local_paths,
 )
 from kiro_crew.validation import strip_hidden_unicode
 
@@ -173,6 +174,28 @@ def _scrub(text: str) -> tuple[str, int]:
     for pattern, repl in _EXTRA_REDACTIONS:
         text, n = pattern.subn(repl, text)
         count += n
+    return text, count
+
+
+def _scrub_bundle(text: str) -> tuple[str, int]:
+    """``_scrub`` plus an absolute-path pass, for bundle text members only.
+
+    The bundle's stated destination is a public issue, so a text member must not
+    carry an absolute host path: on Windows that embeds the OS login on nearly
+    every path-bearing line, and ``versions.txt`` embeds the data-home path. The
+    shared :func:`_scrub` is deliberately left alone -- it also redacts the
+    agent-facing protocol-log reader, whose output goes to a model context, not
+    a public issue, so the extra pass is scoped to the bundle here.
+
+    ``redact_local_paths`` runs LAST, after ``_EXTRA_REDACTIONS``. A header can
+    sit directly after a ``file:line:`` prefix (``/p/req.txt:12:Authorization:
+    Basic …``), and the path regex runs to the next whitespace; running it ahead
+    of the header rule would swallow the header's anchor and ship the credential.
+    Credentials are redacted first, then whole paths.
+    """
+    text, count = _scrub(text)
+    text, warnings = redact_local_paths(text)
+    count += len(warnings)
     return text, count
 
 
@@ -1081,7 +1104,7 @@ def collect_bundle(
     # manifest.json, AND the pre-filled GitHub issue URL — a user may paste a
     # secret (bearer token, key) into "what happened?", so it needs the same
     # redaction the log members get below.
-    note, _ = _scrub(note or "")
+    note, _ = _scrub_bundle(note or "")
 
     stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
     filename = f"kirocrew-diagnostics-{stamp}-{uuid.uuid4().hex[:8]}.zip"
@@ -1140,9 +1163,14 @@ def collect_bundle(
     with os.fdopen(_fd, "wb") as _raw, zipfile.ZipFile(_raw, "w", zipfile.ZIP_DEFLATED) as zf:
         # Generated members first.
         versions = _versions_text(note, identity)
+        # ``versions.txt`` carries the absolute ``data_home`` path
+        # unconditionally, which embeds the OS login. Run it through the bundle
+        # scrub stack so the archive does not ship a local path in a file whose
+        # stated destination is a public issue.
+        versions, versions_n = _scrub_bundle(versions)
         zf.writestr("versions.txt", versions)
         result.included.append("versions.txt")
-        result.redaction_summary["versions.txt"] = 0
+        result.redaction_summary["versions.txt"] = versions_n
 
         for member, src, _gated in text_sources:
             try:
@@ -1163,7 +1191,7 @@ def collect_bundle(
             if text is None:
                 result.skipped.append(member)
                 continue
-            clean, n = _scrub(text)
+            clean, n = _scrub_bundle(text)
             zf.writestr(member, clean)
             result.included.append(member)
             result.redaction_summary[member] = n
