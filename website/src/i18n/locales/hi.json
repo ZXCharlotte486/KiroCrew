@@ -6316,7 +6316,8 @@
       "split_down": "नीचे विभाजित करें",
       "split_right": "दाईं ओर विभाजित करें",
       "split_right_d": "दाईं ओर विभाजित करें (⌘D)",
-      "type_to_filter": "फ़िल्टर करने के लिए टाइप करें…"
+      "type_to_filter": "फ़िल्टर करने के लिए टाइप करें…",
+      "show_earlier_messages": "पहले के संदेश दिखाएँ"
     },
     "cliPanel": {
       "copied": "कॉपी हो गया",
@@ -17470,7 +17471,13 @@
       "dashboard_unavailable": "यह डैशबोर्ड लोड नहीं हो सका।",
       "dashboard_render_error": "यह डैशबोर्ड ड्रॉ नहीं हो सका।",
       "dashboard_frame_title": "{{crew}} का डैशबोर्ड",
-      "dashboard_rendering": "डैशबोर्ड बनाया जा रहा है…"
+      "dashboard_rendering": "डैशबोर्ड बनाया जा रहा है…",
+      "new_conversation": "नई बातचीत",
+      "new_conversation_tooltip": "इस थ्रेड में नई बातचीत शुरू करें",
+      "new_conversation_confirm_title": "{{name}} के साथ नई बातचीत शुरू करें?",
+      "new_conversation_confirm_body": "{{name}} यह बातचीत भूल जाएगा। उसकी दीर्घकालिक स्मृति बनी रहती है, और पहले के संदेश “पहले के संदेश दिखाएँ” के नीचे इसी थ्रेड में रहते हैं।",
+      "new_conversation_confirm_action": "नई बातचीत शुरू करें",
+      "new_conversation_failed_title": "नई बातचीत शुरू नहीं हो सकी"
     },
     "tasksCapacityCard": {
       "title": "कार्य और क्षमता",

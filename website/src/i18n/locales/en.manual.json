@@ -2110,7 +2110,8 @@
       "history_load_failed": "Couldn't load this session's messages.",
       "retry": "Retry",
       "stop_failed": "Couldn't stop this turn ({{error}}). Press Stop again.",
-      "stop_failed_network": "Couldn't reach the server to stop this turn. Press Stop again."
+      "stop_failed_network": "Couldn't reach the server to stop this turn. Press Stop again.",
+      "show_earlier_messages": "Show earlier messages"
     },
     "cliPanel": {
       "copied": "Copied",
@@ -8085,7 +8086,13 @@
       "failed_to_load_app": "Failed to load app"
     },
     "membersPage": {
-      "drawer_delegated_working": "Delegated work running"
+      "drawer_delegated_working": "Delegated work running",
+      "new_conversation": "New conversation",
+      "new_conversation_tooltip": "Start a fresh conversation on this thread",
+      "new_conversation_confirm_title": "Start a new conversation with {{name}}?",
+      "new_conversation_confirm_body": "{{name}} forgets this conversation. Its long-term memory stays, and the earlier messages stay on this thread under “Show earlier messages”.",
+      "new_conversation_confirm_action": "Start a new conversation",
+      "new_conversation_failed_title": "Couldn't start a new conversation"
     }
   },
   "privacyDisclosure": {

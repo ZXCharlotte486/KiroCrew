@@ -874,6 +874,58 @@ def member_name_for_slug(cfg, slug) -> "str | None":
     return None
 
 
+def record_slot_reset(slot_key: str, previous_sid: str, message_seq: int) -> bool:
+    """Queue a ``slot/reset`` boundary on the member log of *slot_key*'s owner.
+
+    ANSWERS whether the append was QUEUED, not whether it landed: the write goes
+    on the ordered executor, because the reset route runs on the gateway serving
+    loop and the append fsyncs. A caller that must know the entry reached the log
+    has to read the projection back.
+
+    The owner is resolved from the slot key itself, through the members module's
+    one spelling of that strip, so only a member's own DM slot records a boundary.
+    An ordinary chat slot bound to a member's private store has a member owner too
+    -- the slots broadcast resolves that second case out of the CONFIG -- but it is
+    not resolved here: that read parses config, which this path must not do on the
+    loop, and the boundary's only consumer is the crewmate DM pane, which is the
+    first case. A slot with no member owner writes nothing rather than guessing.
+
+    ``message_seq`` is the slot's transcript length at the boundary, which is the
+    fact that tells the rows the model still remembers from the rows it does not.
+    The rows themselves are untouched -- a discard deliberately leaves the
+    transcript on disk -- so this number is the only thing that can draw the line.
+    """
+    from kiro_crew.eventlog.types import SLOT_RESET
+    from kiro_crew.members import slug_from_dm_slot_key
+
+    try:
+        slug = slug_from_dm_slot_key(slot_key)
+    except Exception:
+        logger.debug("slot/reset owner could not be resolved", exc_info=True)
+        return False
+    if not slug:
+        return False
+    data = {
+        "slot_key": slot_key,
+        # Coerced at the boundary rather than trusted from the caller: the log is
+        # append-only, so a non-string that reached it would be a permanent line
+        # no reader can compare against a session id. "" is the honest value for
+        # "this slot was serving no id we can name".
+        "previous_sid": previous_sid if isinstance(previous_sid, str) else "",
+        "message_seq": (
+            message_seq if isinstance(message_seq, int) and not isinstance(message_seq, bool) else 0
+        ),
+    }
+
+    def _append() -> None:
+        # `name` left empty on purpose, the way the slots broadcast leaves it:
+        # `emit` passes `name or slug` to `ensure`, which resolves the exact name
+        # from the roster once per member rather than once per event.
+        emit(slug, "", SLOT_RESET, data)
+
+    return submit(_append)
+
+
 def emit(slug, name, type, data) -> bool:
     """Ensure a member's log exists and append one event; answer whether it landed.
 

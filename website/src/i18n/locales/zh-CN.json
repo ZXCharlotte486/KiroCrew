@@ -6216,7 +6216,8 @@
       "split_down": "向下分屏",
       "split_right": "向右分屏",
       "split_right_d": "向右分屏（⌘D）",
-      "type_to_filter": "输入以筛选…"
+      "type_to_filter": "输入以筛选…",
+      "show_earlier_messages": "显示更早的消息"
     },
     "cliPanel": {
       "copied": "已复制",
@@ -17198,7 +17199,13 @@
       "dashboard_unavailable": "无法加载该仪表板。",
       "dashboard_render_error": "无法绘制该仪表板。",
       "dashboard_frame_title": "{{crew}} 的仪表板",
-      "dashboard_rendering": "正在绘制仪表板…"
+      "dashboard_rendering": "正在绘制仪表板…",
+      "new_conversation": "新对话",
+      "new_conversation_tooltip": "在这个会话里开始一段新对话",
+      "new_conversation_confirm_title": "和 {{name}} 开始新对话？",
+      "new_conversation_confirm_body": "{{name}} 会忘记这段对话。长期记忆保留，更早的消息也仍在这个会话里，可从“显示更早的消息”查看。",
+      "new_conversation_confirm_action": "开始新对话",
+      "new_conversation_failed_title": "无法开始新对话"
     },
     "tasksCapacityCard": {
       "title": "任务与容量",

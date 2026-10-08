@@ -6216,7 +6216,8 @@
       "split_down": "아래로 분할",
       "split_right": "오른쪽으로 분할",
       "split_right_d": "오른쪽으로 분할 (⌘D)",
-      "type_to_filter": "입력하여 필터링…"
+      "type_to_filter": "입력하여 필터링…",
+      "show_earlier_messages": "이전 메시지 보기"
     },
     "cliPanel": {
       "copied": "복사됨",
@@ -17198,7 +17199,13 @@
       "dashboard_unavailable": "이 대시보드를 불러올 수 없습니다.",
       "dashboard_render_error": "이 대시보드를 그릴 수 없습니다.",
       "dashboard_frame_title": "{{crew}}의 대시보드",
-      "dashboard_rendering": "대시보드 그리는 중…"
+      "dashboard_rendering": "대시보드 그리는 중…",
+      "new_conversation": "새 대화",
+      "new_conversation_tooltip": "이 스레드에서 새 대화를 시작합니다",
+      "new_conversation_confirm_title": "{{name}}와 새 대화를 시작할까요?",
+      "new_conversation_confirm_body": "{{name}}는 이 대화를 잊습니다. 장기 기억은 유지되고, 이전 메시지도 '이전 메시지 보기' 아래 이 스레드에 남습니다.",
+      "new_conversation_confirm_action": "새 대화 시작",
+      "new_conversation_failed_title": "새 대화를 시작할 수 없습니다"
     },
     "tasksCapacityCard": {
       "title": "작업 및 용량",

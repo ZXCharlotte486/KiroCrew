@@ -144,6 +144,7 @@ export default function ChatPane({
   onSessionOpen,
   sessions,
   activeSession,
+  conversationStartTs,
 }: {
   slotKey: string
   onOpenCommandCenter?: () => void
@@ -236,6 +237,17 @@ export default function ChatPane({
   onSessionOpen?: (key: string) => void
   sessions?: ReadonlyMap<string, string>
   activeSession?: string
+  /** Epoch ms at which this slot's CURRENT conversation begins — the moment a
+   *  "New conversation" discarded the one before it. Rows older than this are
+   *  still in the transcript (a discard deliberately deletes nothing) but the
+   *  model does not remember them, so they are collapsed behind "Show earlier
+   *  messages" instead of reading as current context.
+   *
+   *  The host reads it from the member log's own projection, never from this
+   *  pane's state, which is what makes the line survive a reload and a gateway
+   *  restart. Undefined = no reset on record, and the pane draws exactly what it
+   *  drew before. */
+  conversationStartTs?: number
 }) {
   // One instance covers both dropdown filter inputs (never open at once).
   const dispatch = useAppDispatch()
@@ -502,10 +514,29 @@ export default function ChatPane({
   // turn runs, its tool calls and thinking stay in, so the chat shows what the
   // crewmate is doing (same liveness the footer reads).
   const crewmateLive = running || !!paneSlot?.running
-  const messages = useMemo(
-    () => (crewmate ? filterCrewmateChat(paneMessages, crewmateLive) : paneMessages),
-    [crewmate, paneMessages, crewmateLive],
-  )
+  // Pressed "Show earlier messages": the rows from before the conversation
+  // boundary are drawn again. One-way within a mounted pane — a reader who asked
+  // for the history is not asked to ask twice — and reset when the pane changes
+  // slot or a NEW boundary lands, so a fresh conversation starts collapsed.
+  const [showEarlier, setShowEarlier] = useState(false)
+  useEffect(() => { setShowEarlier(false) }, [slotKey, conversationStartTs])
+  const { messages, earlierHidden } = useMemo(() => {
+    const drawn = crewmate ? filterCrewmateChat(paneMessages, crewmateLive) : paneMessages
+    if (!conversationStartTs || showEarlier) return { messages: drawn, earlierHidden: 0 }
+    // A PREFIX walk, not a filter, and that is the safe reading of a transcript
+    // whose rows are chronological: it stops at the first row that is not older
+    // than the boundary, so a row with an unreadable `ts` in the middle cannot
+    // hide the tail behind it. A row with no readable `ts` counts as current for
+    // the same reason — showing a message that may be older is a smaller error
+    // than hiding one that is not.
+    let cut = 0
+    while (cut < drawn.length) {
+      const at = Date.parse(drawn[cut].ts ?? '')
+      if (!Number.isFinite(at) || at >= conversationStartTs) break
+      cut++
+    }
+    return cut === 0 ? { messages: drawn, earlierHidden: 0 } : { messages: drawn.slice(cut), earlierHidden: cut }
+  }, [crewmate, paneMessages, crewmateLive, conversationStartTs, showEarlier])
   // The unfiltered rows, handed to the row set for the one read that must see
   // what the filter dropped (the steer-chip decision reads the policy-block
   // inject row). `undefined` for an ordinary chat, so its renderer set does not
@@ -1712,6 +1743,22 @@ export default function ChatPane({
                 : undefined,
             aboveRows: (
               <>
+                {/* The conversation boundary. Above every other row because the
+                    rows under it are the current conversation and the ones
+                    behind this control are not: the line reads as the top of
+                    what the model remembers. No count on it, like the
+                    open-session row below: a count is a plural form in thirteen
+                    catalogs for a number the press reveals anyway. */}
+                {earlierHidden > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEarlier(true)}
+                    className="block w-full text-center text-accent text-[12px] underline py-2 bg-transparent border-none cursor-pointer hover:text-accent-hover transition-colors"
+                    data-testid="chat-pane-show-earlier"
+                  >
+                    {i18nT('components.chatPane.show_earlier_messages')}
+                  </button>
+                )}
                 {slotDetailFailed && (
                   <div className="mx-4 my-2 flex items-start gap-2">
                     {/* No hand-off: the composer draft (`input`) in this pane is unsaved local
@@ -1731,9 +1778,14 @@ export default function ChatPane({
                     to start" beside a summary that counts its wakes. Said only
                     once the read is the WHOLE history (`crewmateQuietUnproven`
                     above): a bounded window with no speech in it is not proof. */}
+                {/* `earlierHidden` guards the quiet reading: a crewmate whose
+                    conversation was just discarded has rows in `paneMessages`
+                    and none drawn, which is the exact shape "has been quiet"
+                    tests for — but it has not been quiet, it has been reset, and
+                    the fresh-thread hint is the true line there. */}
                 {messages.length === 0 && !running && !slotDetailFailed && !hideEmptyHint && !crewmateQuietUnproven && (
-                  <div className="text-center text-muted text-[13px] px-4 py-8" data-testid={crewmate && paneMessages.length > 0 ? 'crewmate-quiet-hint' : undefined}>
-                    {crewmate && paneMessages.length > 0 ? (
+                  <div className="text-center text-muted text-[13px] px-4 py-8" data-testid={crewmate && paneMessages.length > 0 && earlierHidden === 0 ? 'crewmate-quiet-hint' : undefined}>
+                    {crewmate && paneMessages.length > 0 && earlierHidden === 0 ? (
                       <>
                         <div>{i18nT('components.chatPane.crewmate_quiet', { name: crewmate.label || crewmate.name })}</div>
                         {/* Where the work went: Profile > Sessions. A link when the host

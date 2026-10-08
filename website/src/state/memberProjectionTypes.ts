@@ -33,6 +33,12 @@ export interface RosterView {
   slot_key?: string
   last_active_ts?: number
   last_message?: string
+  /** Where each of this member's slots' CURRENT conversation begins, keyed by
+   *  slot key: the last `slot/reset` recorded for that slot. `ts` is epoch ms
+   *  (the member log envelope's own `time`); `message_seq` is the transcript
+   *  length at that moment, kept for a reader asking how much was discarded.
+   *  Absent for a slot that has never been reset. */
+  conversation_starts?: { [slotKey: string]: { message_seq?: number; ts?: number } }
 }
 
 /** The 'activity' projection: recent participation records plus rolling counts. */

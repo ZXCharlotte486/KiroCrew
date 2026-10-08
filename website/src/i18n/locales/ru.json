@@ -6516,7 +6516,8 @@
       "split_down": "Разделить вниз",
       "split_right": "Разделить вправо",
       "split_right_d": "Разделить вправо (⌘D)",
-      "type_to_filter": "Введите для фильтрации…"
+      "type_to_filter": "Введите для фильтрации…",
+      "show_earlier_messages": "Показать предыдущие сообщения"
     },
     "cliPanel": {
       "copied": "Скопировано",
@@ -18014,7 +18015,13 @@
       "dashboard_unavailable": "Не удалось загрузить эту панель.",
       "dashboard_render_error": "Не удалось отрисовать эту панель.",
       "dashboard_frame_title": "Панель {{crew}}",
-      "dashboard_rendering": "Отрисовка панели..."
+      "dashboard_rendering": "Отрисовка панели...",
+      "new_conversation": "Новый разговор",
+      "new_conversation_tooltip": "Начать новый разговор в этой ветке",
+      "new_conversation_confirm_title": "Начать новый разговор с {{name}}?",
+      "new_conversation_confirm_body": "{{name}} забудет этот разговор. Долговременная память сохраняется, а предыдущие сообщения остаются в этой ветке под «Показать предыдущие сообщения».",
+      "new_conversation_confirm_action": "Начать новый разговор",
+      "new_conversation_failed_title": "Не удалось начать новый разговор"
     },
     "tasksCapacityCard": {
       "title": "Задачи и ёмкость",

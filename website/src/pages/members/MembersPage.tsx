@@ -42,7 +42,7 @@
  */
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Check, ChevronRight, Circle, Goal, LayoutDashboard, Loader2, MessageCircleQuestionMark, Plus, RotateCw, Sparkles, Square, Star, Users, X, Zap } from 'lucide-react'
+import { ArrowLeft, Check, ChevronRight, Circle, Goal, LayoutDashboard, Loader2, MessageCircleQuestionMark, MessageSquarePlus, Plus, RotateCw, Sparkles, Square, Star, Users, X, Zap } from 'lucide-react'
 import { usePreviewFlag } from '../../hooks/usePreviewFlag'
 import { PREVIEW_DASHBOARD } from '../../utils/previewFlags'
 import { PanelRightSolid } from '../../components/icons/panels'
@@ -1714,6 +1714,16 @@ export default function MembersPage() {
     [orderedMembers, defaultAgent],
   )
   const activeSlot = active ? threadOutcome?.slot_key ?? '' : ''
+  // Where the DM's CURRENT conversation begins: the last "New conversation" on
+  // this slot, as the member log recorded it. From the projection rather than
+  // from any state this page holds, which is what makes the line survive a
+  // reload and a gateway restart — and what makes a reset performed in another
+  // tab show up here. Undefined for a slot that has never been reset, so the
+  // pane draws exactly what it drew before.
+  const conversationStartTs = useMemo(() => {
+    const at = activeSlot ? activeRoster?.conversation_starts?.[activeSlot]?.ts : undefined
+    return typeof at === 'number' && at > 0 ? at : undefined
+  }, [activeRoster, activeSlot])
   // Two distinct verdicts with two different sentences: a collision is a
   // fact about the roster (the slug's thread belongs to another crew), a
   // failed POST is a transport error. Both render through ErrorNotice so
@@ -2237,6 +2247,75 @@ export default function MembersPage() {
     setSchedAtStake(s || schedDraftDirty.current)
   }, [])
   const { confirm: confirmSched, confirmDialog: schedConfirmDialog } = useConfirm()
+  // "New conversation" on the open crewmate's DM. Its own `useConfirm` rather
+  // than a share of the schedules one: two surfaces asking at once would have
+  // the second answer the first "no", and these two are reached from different
+  // halves of the page.
+  const { confirm: confirmReset, confirmDialog: resetConfirmDialog } = useConfirm()
+  // The DM slot as of this render, for the one read that happens AFTER an await
+  // (see `requestNewConversation`). `activeSlotRef` above cannot serve: it holds
+  // `confirmedSlot`, which is deliberately empty while the thread read is in
+  // flight or has failed, so a reset answered inside that window would compare
+  // against '' and be abandoned although the crewmate never changed.
+  const activeDmSlotRef = useRef('')
+  activeDmSlotRef.current = activeSlot
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState<{ message: string; report?: ErrorReport } | null>(null)
+  /** Start a fresh conversation on the open crewmate's DM slot.
+   *
+   *  Asks first, because what it does cannot be undone from the UI: the model's
+   *  context is gone. What it does NOT do is the other half of the copy — the
+   *  transcript stays, the slot key stays, and the crewmate's long-term memory
+   *  stays — so the dialog says all three, and the earlier messages are one
+   *  click away in the pane rather than deleted.
+   *
+   *  The slot is captured BEFORE the await: the UI stays live while the dialog
+   *  is open (see `useConfirm`), so the answer can arrive after the user has
+   *  switched crewmates, and acting on the slot that is open by then would reset
+   *  a conversation nobody asked about. A switch in that window abandons the
+   *  reset instead.
+   *
+   *  A refusal is SHOWN. The route answers 409 while a turn is in flight on the
+   *  slot or its session, or while sub-agents are still attached — the button is
+   *  disabled for the busy state the page can see, and this is for the busy
+   *  state it cannot (an inbound channel message, a turn admitted between the
+   *  render and the press). Swallowing it would read as "nothing happened" over
+   *  a conversation the model still remembers. */
+  const requestNewConversation = useCallback(() => {
+    const slot = activeSlot
+    const name = activeView ? crewDisplayName(activeView) : ''
+    if (!slot) return
+    void (async () => {
+      const ok = await confirmReset({
+        title: t('pages.membersPage.new_conversation_confirm_title', { name }),
+        body: t('pages.membersPage.new_conversation_confirm_body', { name }),
+        confirmLabel: t('pages.membersPage.new_conversation_confirm_action'),
+        // NOT destructive, which is the whole copy above in one visual: nothing
+        // is deleted. The dialog's default is the red button, and red beside
+        // "the earlier messages stay" reads as a warning the sentence denies.
+        // Weighty, because the model's context does not come back — which is
+        // what a non-danger confirm is for.
+        danger: false,
+      })
+      if (!ok || slot !== activeDmSlotRef.current) return
+      setResetError(null)
+      setResetting(true)
+      try {
+        await api.chatSlotResetConversation(slot)
+        // The boundary lands through the member log's own projection frame. This
+        // invalidation is the fallback for the frame not arriving: the log append
+        // rides a bounded queue that may refuse, and a reset whose boundary never
+        // reached the pane would leave a discarded conversation reading as
+        // current. A refetch costs one request and settles it either way.
+        void queryClient.invalidateQueries({ queryKey: MEMBERS_ROSTER_QUERY_KEY })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        setResetError({ message, report: findReport(message) })
+      } finally {
+        setResetting(false)
+      }
+    })()
+  }, [activeSlot, activeView, confirmReset, queryClient, t])
   /** The section's own collapse toggle, which it cannot guard itself. */
   const requestCancelSchedDraft = useCallback((proceed: () => void) => {
     void (async () => {
@@ -3842,6 +3921,27 @@ export default function MembersPage() {
                     would otherwise be announced on every change. It is in the
                     reading order for a reader who asks. */}
                 <span className="sr-only" data-testid="member-pill-activity-sr">{pillActivity.label}</span>
+                {/* New conversation — a fresh context on the SAME thread.
+                    Beside the panel toggle because it acts on the thread below,
+                    not on the crewmate's identity in the middle: the pill opens
+                    Profile, this one restarts the conversation.
+
+                    Disabled while the crewmate is working, and while a reset is
+                    in flight. The route refuses a busy slot anyway (409), and
+                    that refusal is shown above the thread — this is the honest
+                    control state for the busy it can see, not the enforcement. */}
+                {activeSlot && (
+                  <Btn
+                    onClick={requestNewConversation}
+                    disabled={resetting || !!isRunning(active)}
+                    className="shrink-0 mr-1"
+                    title={t('pages.membersPage.new_conversation_tooltip')}
+                    data-testid="member-new-conversation"
+                  >
+                    <MessageSquarePlus className="lucide-inline" aria-hidden />
+                    {t('pages.membersPage.new_conversation')}
+                  </Btn>
+                )}
                 {showOpener && (
                   <button
                     onClick={togglePanel}
@@ -3918,6 +4018,24 @@ export default function MembersPage() {
                 onDismiss={() => setActionError('')}
                 testId="member-panel-action-error"
               />
+            )}
+            {/* A refused or failed "New conversation". Above the thread, where
+                the notices around it live, and dismissable: the conversation
+                below is intact and unchanged, so this is a report rather than a
+                verdict on the thread. No hand-off, for the reason its
+                neighbours give — the DM composer holds an unsaved draft. */}
+            {resetError && (
+              <div className="px-4 py-2">
+                <ErrorNotice
+                  message={resetError.message}
+                  report={resetError.report}
+                  title={t('pages.membersPage.new_conversation_failed_title')}
+                  onDismiss={() => setResetError(null)}
+                  askAgent={false}
+                  actionPlacement="below"
+                  testId="member-new-conversation-error"
+                />
+              </div>
             )}
             {/* The editor's roster read (crewAgentsQuery, enabled only once the
                 identity pill sets editingCrew) failed: without this the pill would
@@ -4080,6 +4198,7 @@ export default function MembersPage() {
                     onSessionOpen={openSessionGuarded}
                     sessions={connected && slotsLoaded ? sessionRoster : undefined}
                     activeSession={activeSlot}
+                    conversationStartTs={conversationStartTs}
                   />
                 </ErrorBoundary>
               </div>
@@ -4548,6 +4667,10 @@ export default function MembersPage() {
           the section's collapse toggle, so it must sit outside the panel subtree the
           answer may unmount. */}
       {schedConfirmDialog}
+      {/* "New conversation"'s prompt. Out here beside the schedules one and for
+          the same reason: it is raised from the thread header, which a crewmate
+          switch while the dialog is open would unmount under its own answer. */}
+      {resetConfirmDialog}
       {/* CREW-18688: the bot-edit modal, opened in place by the thread header's
           identity pill (member-identity-pill). Renders nothing until editingCrew is
           set; the hook returns open=false until its roster read resolves the

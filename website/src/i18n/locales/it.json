@@ -6416,7 +6416,8 @@
       "split_down": "Dividi in basso",
       "split_right": "Dividi a destra",
       "split_right_d": "Dividi a destra (⌘D)",
-      "type_to_filter": "Digita per filtrare…"
+      "type_to_filter": "Digita per filtrare…",
+      "show_earlier_messages": "Mostra i messaggi precedenti"
     },
     "cliPanel": {
       "copied": "Copiato",
@@ -17742,7 +17743,13 @@
       "dashboard_unavailable": "Non e stato possibile caricare questa dashboard.",
       "dashboard_render_error": "Non e stato possibile disegnare questa dashboard.",
       "dashboard_frame_title": "Dashboard di {{crew}}",
-      "dashboard_rendering": "Disegno della dashboard…"
+      "dashboard_rendering": "Disegno della dashboard…",
+      "new_conversation": "Nuova conversazione",
+      "new_conversation_tooltip": "Avvia una nuova conversazione in questo thread",
+      "new_conversation_confirm_title": "Avviare una nuova conversazione con {{name}}?",
+      "new_conversation_confirm_body": "{{name}} dimenticherà questa conversazione. La sua memoria a lungo termine rimane e i messaggi precedenti restano in questo thread sotto «Mostra i messaggi precedenti».",
+      "new_conversation_confirm_action": "Avvia una nuova conversazione",
+      "new_conversation_failed_title": "Non è stato possibile avviare una nuova conversazione"
     },
     "tasksCapacityCard": {
       "title": "Attività e capacità",

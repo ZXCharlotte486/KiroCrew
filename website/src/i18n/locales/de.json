@@ -6316,7 +6316,8 @@
       "split_down": "Nach unten teilen",
       "split_right": "Nach rechts teilen",
       "split_right_d": "Nach rechts teilen (⌘D)",
-      "type_to_filter": "Zum Filtern tippen…"
+      "type_to_filter": "Zum Filtern tippen…",
+      "show_earlier_messages": "Frühere Nachrichten anzeigen"
     },
     "cliPanel": {
       "copied": "Kopiert",
@@ -17470,7 +17471,13 @@
       "dashboard_unavailable": "Dieses Dashboard konnte nicht geladen werden.",
       "dashboard_render_error": "Dieses Dashboard konnte nicht gezeichnet werden.",
       "dashboard_frame_title": "Dashboard von {{crew}}",
-      "dashboard_rendering": "Dashboard wird gezeichnet…"
+      "dashboard_rendering": "Dashboard wird gezeichnet…",
+      "new_conversation": "Neues Gespräch",
+      "new_conversation_tooltip": "Ein frisches Gespräch in diesem Thread beginnen",
+      "new_conversation_confirm_title": "Ein neues Gespräch mit {{name}} beginnen?",
+      "new_conversation_confirm_body": "{{name}} vergisst dieses Gespräch. Das Langzeitgedächtnis bleibt, und die früheren Nachrichten bleiben in diesem Thread unter „Frühere Nachrichten anzeigen“.",
+      "new_conversation_confirm_action": "Neues Gespräch beginnen",
+      "new_conversation_failed_title": "Neues Gespräch konnte nicht begonnen werden"
     },
     "tasksCapacityCard": {
       "title": "Aufgaben & Kapazität",

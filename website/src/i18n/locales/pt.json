@@ -6416,7 +6416,8 @@
       "split_down": "Dividir abaixo",
       "split_right": "Dividir à direita",
       "split_right_d": "Dividir à direita (⌘D)",
-      "type_to_filter": "Digite para filtrar…"
+      "type_to_filter": "Digite para filtrar…",
+      "show_earlier_messages": "Mostrar mensagens anteriores"
     },
     "cliPanel": {
       "copied": "Copiado",
@@ -17742,7 +17743,13 @@
       "dashboard_unavailable": "Nao foi possivel carregar este painel.",
       "dashboard_render_error": "Nao foi possivel desenhar este painel.",
       "dashboard_frame_title": "Painel de {{crew}}",
-      "dashboard_rendering": "Desenhando o painel…"
+      "dashboard_rendering": "Desenhando o painel…",
+      "new_conversation": "Nova conversa",
+      "new_conversation_tooltip": "Começar uma conversa nova neste tópico",
+      "new_conversation_confirm_title": "Começar uma nova conversa com {{name}}?",
+      "new_conversation_confirm_body": "{{name}} vai esquecer esta conversa. A memória de longo prazo permanece, e as mensagens anteriores continuam neste tópico em «Mostrar mensagens anteriores».",
+      "new_conversation_confirm_action": "Começar uma nova conversa",
+      "new_conversation_failed_title": "Não foi possível começar uma nova conversa"
     },
     "tasksCapacityCard": {
       "title": "Tarefas e capacidade",

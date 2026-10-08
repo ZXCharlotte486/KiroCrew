@@ -84,6 +84,7 @@ from kiro_crew.dashboard.chat_api.slot_lifecycle import (  # noqa: F401
     _release_closed_execution,
     _restore_slot_nudge_loop,
     _retire_slot_nudge_loop,
+    _slot_message_seq,
     _slot_still_ours,
     _wake_conductor_for_closed_worker,
     api_chat_slot_delete,

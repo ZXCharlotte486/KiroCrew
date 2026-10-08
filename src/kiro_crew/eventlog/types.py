@@ -47,6 +47,18 @@ ACTIVITY_RECORD = "activity/record"
 SLOT_OPENED = "slot/opened"
 SLOT_CLOSED = "slot/closed"
 
+# The slot's native conversation was discarded and the next turn cold-starts a
+# fresh one. The slot itself stays open and its transcript stays on disk, so this
+# is neither an open nor a close: it is the BOUNDARY between two conversations
+# inside one slot's history.
+# data: {"slot_key": str, "previous_sid": str, "message_seq": int}
+#   previous_sid — the ACP session id that was dropped, so the successor's
+#     ``session/opened {previous: {sid}}`` can be read against it.
+#   message_seq — how many transcript rows the slot held at the boundary. The
+#     rows are not deleted, so this is what tells the rows the model still
+#     remembers from the rows it does not.
+SLOT_RESET = "slot/reset"
+
 # The member's patrol (auto-nudge loop on its DM slot) started / stopped.
 # data: {"slot_key": str}  /  {"slot_key": str, "reason": str}
 # reason is the loop's stopped_reason, or "interrupted" when synthesised at load.
@@ -62,6 +74,7 @@ ALL_EVENT_TYPES = frozenset(
         ACTIVITY_RECORD,
         SLOT_OPENED,
         SLOT_CLOSED,
+        SLOT_RESET,
         PATROL_STARTED,
         PATROL_STOPPED,
     }
@@ -99,7 +112,11 @@ def is_known_event_type(type_: str) -> bool:
 
 # ---- projection keys -----------------------------------------------------
 
-PROJ_ROSTER = "roster"  # MemberRosterRow minus ``running``
+#: ``MemberRosterRow`` minus ``running``, plus ``conversation_starts``:
+#: ``{slot_key: {message_seq, ts}}`` for the slots this member has reset, which is
+#: where each of those slots' CURRENT conversation begins. Served on every roster
+#: read, so a DM pane has the boundary before any live frame arrives.
+PROJ_ROSTER = "roster"
 PROJ_ACTIVITY = (
     "activity"  # {"recent": [record...] (newest first, <= 50), "today": int, "week": int}
 )

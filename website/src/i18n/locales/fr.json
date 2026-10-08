@@ -6416,7 +6416,8 @@
       "split_down": "Diviser vers le bas",
       "split_right": "Diviser vers la droite",
       "split_right_d": "Diviser vers la droite (⌘D)",
-      "type_to_filter": "Saisir pour filtrer…"
+      "type_to_filter": "Saisir pour filtrer…",
+      "show_earlier_messages": "Afficher les messages précédents"
     },
     "cliPanel": {
       "copied": "Copié",
@@ -17742,7 +17743,13 @@
       "dashboard_unavailable": "Ce tableau de bord n'a pas pu etre charge.",
       "dashboard_render_error": "Ce tableau de bord n'a pas pu etre dessine.",
       "dashboard_frame_title": "Tableau de bord de {{crew}}",
-      "dashboard_rendering": "Affichage du tableau de bord…"
+      "dashboard_rendering": "Affichage du tableau de bord…",
+      "new_conversation": "Nouvelle conversation",
+      "new_conversation_tooltip": "Démarrer une nouvelle conversation dans ce fil",
+      "new_conversation_confirm_title": "Démarrer une nouvelle conversation avec {{name}} ?",
+      "new_conversation_confirm_body": "{{name}} oubliera cette conversation. Sa mémoire à long terme est conservée, et les messages précédents restent dans ce fil sous « Afficher les messages précédents ».",
+      "new_conversation_confirm_action": "Démarrer une nouvelle conversation",
+      "new_conversation_failed_title": "Impossible de démarrer une nouvelle conversation"
     },
     "tasksCapacityCard": {
       "title": "Tâches et capacité",

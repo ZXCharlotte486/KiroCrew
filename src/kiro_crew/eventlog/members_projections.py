@@ -30,6 +30,16 @@ _CONFIG_FIELDS = (
 
 _ACTIVITY_RING = 50
 
+# How many slots' conversation boundaries the roster fold retains. A member
+# drives one DM slot in ordinary use, so this is headroom rather than a working
+# figure -- but the key is a slot key read off an event, the log is append-only
+# with no compaction, and nothing here can ever drop a key once folded, so an
+# unbounded map is one planted or long-lived log away from a roster row that is
+# served on every roster read and grows forever. Eviction takes the OLDEST
+# boundary (lowest `ts`), because the newest is the one a pane is reading to
+# decide what the model still remembers.
+_CONVERSATION_STARTS_MAX = 16
+
 # The furthest ahead of the fold's own wall clock a `member/message` timestamp
 # may push `last_active_ts`. The monotone rule (see `RosterProjection.apply`)
 # has no upper bound of its own: it latches the greatest `ts` it has ever seen
@@ -101,9 +111,64 @@ def _parse_ts(ts: Any) -> float | None:
 # ---------------------------------------------------------------------------
 # roster
 # ---------------------------------------------------------------------------
+def _fold_conversation_start(state: dict, event: Event) -> dict:
+    """``conversation_starts`` with *event*'s ``slot/reset`` boundary folded in.
+
+    Returns the SAME state object when the event says nothing this fold can use,
+    so the registry reads it as a no-op and announces nothing.
+
+    Last-wins per slot key, which is what "the CURRENT conversation starts here"
+    means: a second reset on one slot supersedes the first, and the superseded
+    boundary is already in the log for anybody asking when it happened.
+
+    The payload is validated rather than trusted. These bytes come off a file
+    this fold does not control -- a damaged line, a hand edit inside the member's
+    log directory -- and the value is served to a browser on every roster read,
+    so a `slot_key` that is not a string or a `message_seq` that is not a count
+    is dropped here instead of being carried into a pane that would then hide an
+    arbitrary prefix of a conversation.
+    """
+    data = event.get("data") or {}
+    slot_key = data.get("slot_key")
+    if not isinstance(slot_key, str) or not slot_key:
+        return state
+    seq = data.get("message_seq")
+    # `bool` is an `int` in Python and a flag is not a row count.
+    if isinstance(seq, bool) or not isinstance(seq, int) or seq < 0:
+        return state
+    ts = event.get("time")
+    if not isinstance(ts, (int, float)) or isinstance(ts, bool):
+        return state
+    held = state.get("conversation_starts")
+    starts = dict(held) if isinstance(held, dict) else {}
+    starts[slot_key] = {"message_seq": seq, "ts": ts}
+    if len(starts) > _CONVERSATION_STARTS_MAX:
+        ordered = sorted(
+            starts.items(),
+            key=lambda item: item[1].get("ts", 0) if isinstance(item[1], dict) else 0,
+        )
+        for stale_key, _ in ordered[: len(starts) - _CONVERSATION_STARTS_MAX]:
+            starts.pop(stale_key, None)
+    if starts == held:
+        return state
+    new = dict(state)
+    new["conversation_starts"] = starts
+    return new
+
+
 class RosterProjection:
     key = types.PROJ_ROSTER
-    #: 2 because `last_active_ts` is MONOTONE (see `apply`), which is bookkeeping
+    #: 3 because the fold gained `conversation_starts` (see
+    #: `_fold_conversation_start`), and a savepoint written by a fold WITHOUT
+    #: that rule holds no boundary at all for a slot that was reset before the
+    #: upgrade -- a resumed fold applies only the events after its watermark, so
+    #: that member's pane would show a discarded conversation as current for the
+    #: life of the store. A bump discards such a savepoint
+    #: (`projection/checkpoint.py` refuses a payload whose `state_version`
+    #: differs) and the member's own log is re-folded from the start, which is
+    #: where the boundary is.
+    #:
+    #: 2 was for `last_active_ts` being MONOTONE (see `apply`), which is bookkeeping
     #: a savepoint written by a fold WITHOUT that rule can contradict. Such a
     #: savepoint can hold a recency a preview correction walked backwards, and
     #: resuming it applies only the events after it -- so the regressed value
@@ -113,7 +178,7 @@ class RosterProjection:
     #: refuses the payload), after which the member's own log is re-folded from
     #: the start under the monotone rule. Cheap, and the only lossless answer:
     #: the events the bad savepoint consumed are the ones that hold the truth.
-    state_version = 2
+    state_version = 3
 
     def init(self) -> dict:
         return {}
@@ -121,6 +186,8 @@ class RosterProjection:
     def apply(self, state: dict, event: Event) -> dict:
         etype = event["type"]
         data = event.get("data") or {}
+        if etype == types.SLOT_RESET:
+            return _fold_conversation_start(state, event)
         if etype == types.MEMBER_CONFIG:
             new = dict(state)
             for f in _CONFIG_FIELDS:

@@ -348,6 +348,27 @@ async def api_chat_slot_reset_conversation(request: web.Request) -> web.Response
     if attached is not None:
         return attached
 
+    # Read BEFORE the teardown, both of them. The sid is gone from the provider
+    # once the discard has run, and the transcript length is the length AT the
+    # boundary -- a count taken afterwards could already include a row from the
+    # successor conversation, which would hide a message the model does remember.
+    # Neither read suspends, so nothing can move between them and the discard.
+    #
+    # Imported in the body, not at module scope: an owner's functions run on the
+    # handlers module's globals (see ``chat_api.compose``), so a module-level
+    # import here would be a name no function could read. A local binding is the
+    # owner's own, and it keeps this flag-gated subsystem off the gateway's boot
+    # path as well.
+    from kiro_crew.crew_log import emit as crew_log_emit
+
+    previous_sid = crew_log_emit.session_id_of(provider) if provider is not None else ""
+    if not previous_sid:
+        # No live provider for this key (a slot resumed into a tab nobody has
+        # typed in yet). The map still knows the id this key was last serving,
+        # which is the one the successor will cite as its predecessor.
+        previous_sid = state.sessions.mapped_sid(key)
+    message_seq = _slot_message_seq(slot)
+
     # ``skip_if_busy``: the fast paths above cannot see a turn that holds the
     # per-session semaphore but has not yet put a prompt in flight (an inbound
     # channel message between the lease and its first stream event). The discard
@@ -371,6 +392,18 @@ async def api_chat_slot_reset_conversation(request: web.Request) -> web.Response
     # discard: a refusal above leaves the old conversation (and its verdict) in
     # place.
     slot.forget_session_model_state()
+    # The durable boundary. The transcript is deliberately left in place, so
+    # nothing in the slot's own files says where the discarded conversation ends
+    # and the fresh one begins -- the member log is what says it, and the roster
+    # projection is what hands it to the pane, which is why this survives a reload
+    # and a gateway restart. Only on a performed discard, and only after it: a
+    # refusal above left the conversation in place, so there is no boundary.
+    # Best-effort by construction (see ``record_slot_reset``): a reset that
+    # happened must not be reported as refused because its bookkeeping could not
+    # be queued.
+    from kiro_crew import eventlog_hooks
+
+    eventlog_hooks.record_slot_reset(name, previous_sid, message_seq)
     sel().log_api_access(
         caller=request.get("app", "") or "dashboard",
         operation="slot_reset_conversation",
@@ -378,6 +411,26 @@ async def api_chat_slot_reset_conversation(request: web.Request) -> web.Response
         resources=f"slot={name} replay={replay}",
     )
     return web.json_response({"slot": name, "reset": True, "replay": replay})
+
+
+def _slot_message_seq(slot: "_ChatSlot") -> int:
+    """How many transcript rows *slot* holds, across gateway restarts.
+
+    The same two halves the detail read serves as one history: the rows below the
+    in-memory window (``_disk_older_count``, set at restore and stable afterwards)
+    plus the window itself. A missing or non-integer counter is read as zero, so a
+    boundary is still recorded for a slot whose older-count could not be resolved
+    -- it then names the window's own start, which is the earliest row that read
+    can prove, rather than no boundary at all.
+    """
+    older = getattr(slot, "_disk_older_count", 0)
+    if isinstance(older, bool) or not isinstance(older, int) or older < 0:
+        older = 0
+    try:
+        window = len(slot.messages)
+    except Exception:
+        window = 0
+    return older + window
 
 
 def _release_closed_execution(
