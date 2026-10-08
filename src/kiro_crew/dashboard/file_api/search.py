@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         _probe_busy_response,
         _run_path_probe,
         _sel,
+        _walk_monotonic,
         data_home,
         logger,
         platform_compat,
@@ -313,20 +314,21 @@ async def api_file_search(request: web.Request) -> web.Response:
     # Wall-clock budget for the walk, read on the loop and frozen into a monotonic
     # deadline the blocking thread checks. The entry/dir ceilings above bound how
     # many filesystem calls the walk makes; this bounds how long they are allowed
-    # to take, which is the term a slow network mount inflates (#11419).
+    # to take, which is the term a slow network mount inflates.
     # ``_WALK_DEADLINE_STRIDE`` is how many entries one ``_collect`` scans between
     # clock reads -- a single huge directory could otherwise overrun the budget
     # between the per-directory checks, exactly as the grep path strides its own
     # row loop (``_GREP_ROW_DEADLINE_STRIDE``).
     walk_budget_secs = _WALK_TIME_BUDGET_SECS
 
-    def _walk_file_search() -> tuple[list[dict], bool]:
+    def _walk_file_search() -> list[dict]:
         """Blocking file-system walk — offloaded via asyncio.to_thread.
 
-        Returns ``(entries, timed_out)``. ``timed_out`` is True when the walk
-        stopped on its wall-clock budget rather than running out of tree; the
-        caller surfaces it as ``truncated`` in the response, the same signal the
-        entry/dir ceilings already raise.
+        Returns the collected entries. The walk stops EARLY when its wall-clock
+        budget runs out, so a healthy-but-slow store returns the partial set it
+        gathered before the deadline instead of outrunning the client's own 15s
+        bound on every attempt; the entry/dir ceilings stop it early for size.
+        Either way the caller gets whatever was scored so far.
 
         Files and directories are collected into SEPARATE candidate lists, each
         with its own ``max_collect`` allowance. A shared list would let a burst
@@ -347,11 +349,11 @@ async def api_file_search(request: web.Request) -> web.Response:
         walked: dict[str, int] = {"file": 0, "dir": 0}
         dirs_visited = 0
         wanted = {"file": want_files, "dir": want_dirs}
-        deadline = time.monotonic() + walk_budget_secs
+        deadline = _walk_monotonic() + walk_budget_secs
         timed_out = False
 
         def _over_deadline() -> bool:
-            return time.monotonic() >= deadline
+            return _walk_monotonic() >= deadline
 
         def _done(kind: str) -> bool:
             return not wanted[kind] or walked[kind] >= max_scan or len(found[kind]) >= max_collect
@@ -442,13 +444,13 @@ async def api_file_search(request: web.Request) -> web.Response:
                 _collect("dir", dirpath, candidate_dirs, root_dir)
                 if _full() or timed_out:
                     break
-        return found["file"] + found["dir"], timed_out
+        return found["file"] + found["dir"]
 
     # The walk is filesystem work on a caller-supplied root, so it takes a
     # probe slot too: a walk into a dead mount would otherwise pin a
     # default-executor worker exactly as an unbounded stat does.
     try:
-        results, walk_truncated = await _run_path_probe(_walk_file_search, transfer=True)
+        results = await _run_path_probe(_walk_file_search, transfer=True)
     except _PathProbeBusy:
         return _probe_busy_response(resource=f"q={query}", operation="file_search", caller=caller)
 
@@ -470,17 +472,11 @@ async def api_file_search(request: web.Request) -> web.Response:
         caller=caller,
         operation="file_search",
         outcome="allowed",
-        resources=f"q={query} kinds={kinds} roots={len(safe_roots)} results={len(trimmed)} truncated={walk_truncated}",
+        resources=f"q={query} kinds={kinds} roots={len(safe_roots)} results={len(trimmed)}",
     )
     return web.json_response(
         {
             "results": trimmed,
             "root": safe_roots[0] if scoped and safe_roots else "",
-            # True when the walk stopped on its wall-clock budget: a slow store
-            # (network mount) outran ``_WALK_TIME_BUDGET_SECS`` before the tree
-            # was exhausted, so these results are partial. The client treats a
-            # missing field as False, and the walk already truncated silently on
-            # the count ceilings, so this is backward compatible (#11419).
-            "truncated": walk_truncated,
         }
     )

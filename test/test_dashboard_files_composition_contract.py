@@ -264,6 +264,7 @@ _FACADE_DEFS = (
     "_validate_dashboard_path",
     "_PathProbeBusy",
     "_run_path_probe",
+    "_walk_monotonic",
     "_probe_busy_response",
     "_PathProbe",
     "_probe_request_path",
@@ -550,7 +551,7 @@ def test_every_base_definition_is_in_exactly_one_place() -> None:
     }
     assert defined == set(_FACADE_DEFS)
     moved = {name for names in _BASE_OWNERS.values() for name in names}
-    assert len(defined | moved) == len(defined) + len(moved) == 134
+    assert len(defined | moved) == len(defined) + len(moved) == 135
 
 
 def test_the_owners_log_as_the_facade() -> None:

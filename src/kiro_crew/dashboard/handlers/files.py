@@ -1584,11 +1584,16 @@ _WALK_MAX_DIRS_VISITED = 20_000
 #: NFS/SSHFS-class mount each ``os.stat``/``scandir`` is a network round trip, so
 #: the same bounded number of calls can run many times longer and blow straight
 #: past the client's 15s; the client's Retry re-enters the same bound, so a
-#: healthy-but-slow store fails every attempt (#11419, PR #7068's deferral). This
-#: bounds the one term store speed inflates: the walk stops early and the result
-#: is marked ``truncated`` -- the SAME observable outcome the entry/dir ceilings
-#: already produce, now reached by elapsed time too. 10s keeps the whole walk
-#: comfortably under the client's 15s with room for admission and round trips.
+#: healthy-but-slow store fails every attempt. This bounds the one term store
+#: speed inflates: when a per-directory or per-stride clock check finds the
+#: budget spent, the walk stops and returns the partial set it gathered, the
+#: same early stop the entry/dir ceilings already make for size, reached by
+#: elapsed time. The check is cooperative, so a single ``os.stat`` that blocks
+#: on a dead mount can overrun the budget before the next check runs; this
+#: shortens the common slow-but-alive case rather than guaranteeing a hard
+#: wall-clock cap. 10s is chosen to sit
+#: under the client's 15s on a store that
+#: answers each call, with room for admission and round trips.
 #: Module-level so a test can shrink it, exactly as ``_GREP_TIME_BUDGET_SECS``.
 _WALK_TIME_BUDGET_SECS = 10.0
 
@@ -1598,6 +1603,19 @@ _WALK_TIME_BUDGET_SECS = 10.0
 #: every stride -- the same trick, and for the same reason, as the grep path's
 #: ``_GREP_ROW_DEADLINE_STRIDE``. Module-level so a test can shrink it.
 _WALK_DEADLINE_STRIDE = 512
+
+
+#: The monotonic clock ``_walk_file_search`` reads for its wall-clock budget,
+#: named on the module (the facade every owner function resolves against) rather
+#: than called as ``time.monotonic`` inline. A deadline test drives the walk's
+#: clock deterministically by patching THIS name -- advancing it per yielded
+#: directory so the budget crosses on a chosen directory -- which touches only
+#: the walk and leaves the stdlib ``time`` module untouched for the event loop
+#: and every other test (tests-are-deterministic). ``time.monotonic`` is a
+#: facade name no owner captures, so the patch cannot silently miss a caller.
+def _walk_monotonic() -> float:
+    return time.monotonic()
+
 
 # Hard ceiling on the caller-supplied ``limit`` of /api/file-search. The walk
 # collects ``max_results * 10`` candidates per kind, so the limit multiplies real
