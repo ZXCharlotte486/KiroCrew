@@ -5468,6 +5468,9 @@
     "viewPr": "プルリクエスト"
   },
   "components": {
+    "agentLabel": {
+      "builtin_conductor": "コンダクター"
+    },
     "voicePlaybackNotice": {
       "failed": "「{{speak}}」に失敗しました。テキスト音声変換の設定を確認して、もう一度お試しください。",
       "consent_required": "「{{speak}}」を使うには、この AWS プロファイルとリージョンで Amazon Polly の利用を確認する必要があります。テキスト音声変換の設定で確認してから、もう一度お試しください。",
@@ -7653,7 +7656,11 @@
         "all": "すべて",
         "approve": "承認",
         "clear": "クリア",
-        "clear_all_notifications": "すべての通知をクリアしますか？",
+        "clear_all": "すべてクリア",
+        "clear_all_notifications": "すべての通知をクリア",
+        "clear_failed": "一部の通知をクリアできませんでした。もう一度お試しください。",
+        "clear_group": "{{group}}をクリア",
+        "clear_this_group": "このグループをクリア",
         "dismiss_notification": "通知を閉じる",
         "expand_grouped_notifications": "グループ化された通知 {{count}} 件を展開：{{title}}",
         "first_notification_from": "最初の通知",
@@ -7665,6 +7672,7 @@
         "muted_2": "ミュート済み",
         "no_notifications": "通知がありません",
         "open_notification": "通知を開く：{{title}}",
+        "press_again_to_clear": "もう一度押すとクリアします",
         "reject": "却下",
         "search": "検索…",
         "show_less": "少なく表示",
@@ -8210,8 +8218,8 @@
       "undo": "元に戻す",
       "undone": "元に戻しました",
       "undo_failed": "この変更を元に戻せませんでした: {{message}}",
-      "undo_unavailable": "この変更はここでは元に戻せなくなりました。{{name}} のプロフィールで設定してください。Crewmates を開き、{{name}} を選んで、名前の横の鉛筆を押します。",
-      "undo_stale": "この値はその後また変更されたため、この取り消しは適用されません。{{name}} のプロフィールで設定してください。Crewmates を開き、{{name}} を選んで、名前の横の鉛筆を押します。",
+      "undo_unavailable": "この変更はここでは元に戻せなくなりました。{{name}} のプロフィールで設定してください。クルーメイトを開き、{{name}} を選んで、名前の横の鉛筆を押します。",
+      "undo_stale": "この値はその後また変更されたため、この取り消しは適用されません。{{name}} のプロフィールで設定してください。クルーメイトを開き、{{name}} を選んで、名前の横の鉛筆を押します。",
       "field_display_name": "名前",
       "field_description": "説明",
       "field_avatar": "顔",
@@ -18160,8 +18168,6 @@
       "close": "閉じる",
       "driving_none": "現在操作中のセッションはありません。",
       "driving_idle": "アイドル",
-      "driving_show_all": "すべて表示（{{count}}）",
-      "driving_show_less": "折りたたむ",
       "patrol_error_roster": "メンバー一覧のパトロール状態を読み込めませんでした。",
       "loop_on": "見守り中",
       "profile_monitor": "モニター",

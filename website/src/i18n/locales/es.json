@@ -5670,6 +5670,9 @@
     "viewPr": "Solicitud"
   },
   "components": {
+    "agentLabel": {
+      "builtin_conductor": "Conductor"
+    },
     "voicePlaybackNotice": {
       "failed": "No se pudo usar «{{speak}}». Revisa los ajustes de texto a voz e inténtalo de nuevo.",
       "consent_required": "«{{speak}}» necesita que confirmes Amazon Polly para este perfil de AWS y esta región. Confírmalo en los ajustes de texto a voz y vuelve a intentarlo.",
@@ -7903,7 +7906,11 @@
         "all": "Todas",
         "approve": "Aprobar",
         "clear": "Borrar",
-        "clear_all_notifications": "¿Borrar todas las notificaciones?",
+        "clear_all": "Borrar todo",
+        "clear_all_notifications": "Borrar todas las notificaciones",
+        "clear_failed": "No se pudieron borrar algunas notificaciones. Inténtalo de nuevo.",
+        "clear_group": "Borrar {{group}}",
+        "clear_this_group": "Borrar este grupo",
         "dismiss_notification": "Descartar notificación",
         "expand_grouped_notifications": "Expandir {{count}} notificaciones agrupadas: {{title}}",
         "first_notification_from": "Primera notificación de",
@@ -7915,6 +7922,7 @@
         "muted_2": "silenciada",
         "no_notifications": "Sin notificaciones",
         "open_notification": "Abrir la notificación: {{title}}",
+        "press_again_to_clear": "Pulsa de nuevo para borrar",
         "reject": "Rechazar",
         "search": "Buscar…",
         "show_less": "Mostrar menos",
@@ -8480,8 +8488,8 @@
       "undo": "Deshacer",
       "undone": "deshecho",
       "undo_failed": "No se pudo deshacer este cambio: {{message}}",
-      "undo_unavailable": "Este cambio ya no se puede deshacer aquí. Ajusta el valor en el perfil de {{name}}: abre Crewmates, elige {{name}} y luego el lápiz junto a su nombre.",
-      "undo_stale": "Este valor se cambió de nuevo después, así que deshacer ya no aplica. Ajústalo en el perfil de {{name}}: abre Crewmates, elige {{name}} y luego el lápiz junto a su nombre.",
+      "undo_unavailable": "Este cambio ya no se puede deshacer aquí. Ajusta el valor en el perfil de {{name}}: abre Compañeros, elige {{name}} y luego el lápiz junto a su nombre.",
+      "undo_stale": "Este valor se cambió de nuevo después, así que deshacer ya no aplica. Ajústalo en el perfil de {{name}}: abre Compañeros, elige {{name}} y luego el lápiz junto a su nombre.",
       "field_display_name": "nombre",
       "field_description": "descripción",
       "field_avatar": "cara",
@@ -10025,7 +10033,7 @@
       "result_undone": "Restaurado: {{title}}",
       "retry": "Reintentar",
       "risk_code_exec": "Esto ejecuta código de terceros en esta máquina.",
-      "risk_widen": "Esto permite que los crewmates hagan más sin preguntarte.",
+      "risk_widen": "Esto permite que los compañeros hagan más sin preguntarte.",
       "risk_widen_import": "Este compañero usará {{servers}} sin preguntarte.",
       "risk_widen_ack": "Entiendo que esto amplía los permisos",
       "schedule_next_run": "Próxima ejecución",
@@ -12529,7 +12537,7 @@
       "comments_refused_overlay": "{{name}} no ha recibido estos comentarios — vuelve a abrir el panel lateral y envíalos de nuevo. Siguen en el documento.",
       "comments_sent_other": "{{count}} comentarios enviados",
       "comments_sent_many": "{{count}} comentarios enviados",
-      "your_crewmate": "Tu crewmate"
+      "your_crewmate": "Tu compañero"
     },
     "chatSidebar": {
       "1_skipped_currently_selected": "(1 omitida — seleccionada actualmente)",
@@ -18730,8 +18738,6 @@
       "close": "Cerrar",
       "driving_none": "No está dirigiendo ninguna sesión ahora mismo.",
       "driving_idle": "Inactivo",
-      "driving_show_all": "Mostrar todas ({{count}})",
-      "driving_show_less": "Mostrar menos",
       "patrol_error_roster": "No se pudo cargar el estado de patrulla de la lista.",
       "loop_on": "De guardia",
       "profile_monitor": "Monitor",
@@ -18779,7 +18785,7 @@
       "filters_clear": "Borrar filtros",
       "star": "Destacar {{name}}",
       "unstar": "Quitar destacado de {{name}}",
-      "all_hidden_hint": "Los crewmates que aún no has usado están ocultos. Busca para encontrarlos.",
+      "all_hidden_hint": "Los compañeros que aún no has usado están ocultos. Busca para encontrarlos.",
       "hidden_named_hint_many": "{{names}} están ocultos porque aún no los has usado y no se cuentan arriba. Busca para encontrarlos.",
       "hidden_named_hint_one": "{{names}} está oculto porque aún no lo has usado y no se cuenta arriba. Busca para encontrarlo.",
       "hidden_named_hint_other": "{{names}} están ocultos porque aún no los has usado y no se cuentan arriba. Busca para encontrarlos.",

@@ -5468,6 +5468,9 @@
     "viewPr": "풀 리퀘스트"
   },
   "components": {
+    "agentLabel": {
+      "builtin_conductor": "지휘자"
+    },
     "voicePlaybackNotice": {
       "failed": "‘{{speak}}’를 실행하지 못했습니다. 텍스트 음성 변환 설정을 확인하고 다시 시도하세요.",
       "consent_required": "‘{{speak}}’에서 이 AWS 프로필과 리전의 Amazon Polly 사용을 확인해야 합니다. 텍스트 음성 변환 설정에서 확인한 다음 다시 시도하세요.",
@@ -7653,7 +7656,11 @@
         "all": "전체",
         "approve": "승인",
         "clear": "지우기",
-        "clear_all_notifications": "모든 알림을 지우시겠습니까?",
+        "clear_all": "모두 지우기",
+        "clear_all_notifications": "모든 알림 지우기",
+        "clear_failed": "일부 알림을 지우지 못했어요. 다시 시도해 주세요.",
+        "clear_group": "{{group}} 지우기",
+        "clear_this_group": "이 그룹 지우기",
         "dismiss_notification": "알림 닫기",
         "expand_grouped_notifications": "그룹화된 알림 {{count}}건 펼치기: {{title}}",
         "first_notification_from": "다음에서 온 첫 알림:",
@@ -7665,6 +7672,7 @@
         "muted_2": "음소거됨",
         "no_notifications": "알림 없음",
         "open_notification": "알림 열기: {{title}}",
+        "press_again_to_clear": "지우려면 다시 누르세요",
         "reject": "거부",
         "search": "검색…",
         "show_less": "간략히 보기",
@@ -8210,8 +8218,8 @@
       "undo": "실행 취소",
       "undone": "취소됨",
       "undo_failed": "이 변경을 취소할 수 없습니다: {{message}}",
-      "undo_unavailable": "이 변경은 여기서 더 이상 되돌릴 수 없습니다. {{name}}의 프로필에서 값을 설정하세요. Crewmates를 열고 {{name}}을(를) 선택한 뒤 이름 옆 연필을 누르세요.",
-      "undo_stale": "이 값은 그 뒤에 다시 바뀌어서 이 되돌리기는 더 이상 적용되지 않습니다. {{name}}의 프로필에서 설정하세요. Crewmates를 열고 {{name}}을(를) 선택한 뒤 이름 옆 연필을 누르세요.",
+      "undo_unavailable": "이 변경은 여기서 더 이상 되돌릴 수 없습니다. {{name}}의 프로필에서 값을 설정하세요. 크루메이트를 열고 {{name}}을(를) 선택한 뒤 이름 옆 연필을 누르세요.",
+      "undo_stale": "이 값은 그 뒤에 다시 바뀌어서 이 되돌리기는 더 이상 적용되지 않습니다. {{name}}의 프로필에서 설정하세요. 크루메이트를 열고 {{name}}을(를) 선택한 뒤 이름 옆 연필을 누르세요.",
       "field_display_name": "이름",
       "field_description": "설명",
       "field_avatar": "얼굴",
@@ -18160,8 +18168,6 @@
       "close": "닫기",
       "driving_none": "현재 구동 중인 세션이 없습니다.",
       "driving_idle": "유휴",
-      "driving_show_all": "모두 보기({{count}})",
-      "driving_show_less": "접기",
       "patrol_error_roster": "멤버 목록의 순찰 상태를 불러오지 못했습니다.",
       "loop_on": "지켜보는 중",
       "profile_monitor": "모니터",
