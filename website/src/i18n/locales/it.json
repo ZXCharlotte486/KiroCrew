@@ -17699,7 +17699,10 @@
         "desktop_app": "App desktop",
         "keep_running_when_window_closed": "Continua in background dopo la chiusura della finestra",
         "keep_running_when_window_closed_desc": "Chiudendo la finestra, {{productName}} viene nascosto e le sessioni e i lavori pianificati continuano. Disattiva l'opzione perché il pulsante di chiusura chiuda completamente l'app. Un gateway avviato da questa app si arresta con essa, mentre un gateway a cui si connette soltanto continua a funzionare.",
-        "keep_running_when_window_closed_save_failed": "Impossibile salvare questa impostazione. Non è cambiato nulla. Riprova."
+        "keep_running_when_window_closed_save_failed": "Impossibile salvare questa impostazione. Non è cambiato nulla. Riprova.",
+        "milestones_hint": "Mostra Esplora nella barra in alto e una scheda «Prova oggi» in una nuova chat.",
+        "milestones": "Esplora",
+        "milestones_save_failed": "Impossibile salvare l'impostazione di Esplora. Riprova."
       },
       "importPanel": {
         "agent_data": "Dati dell'agente",
@@ -21242,5 +21245,100 @@
     "take_over_typing": "Prendi il controllo",
     "take_over_typing_label": "Prendi il controllo della scrittura da {{name}}. La sua bozza resta a questa persona.",
     "take_over_failed": "Impossibile prendere il controllo della scrittura."
+  },
+  "milestones": {
+    "intro_video_title": "{{productName}} in 15 secondi",
+    "getting_started_result": "Un primo risultato finito",
+    "group_streak": "Serie",
+    "notice_count_one": "{{count}} novità in Esplora",
+    "indicator_label_streak_one": "Esplora: {{done}} funzioni provate su {{total}}, serie di {{count}} giorno",
+    "streak_days_other": "{{count}} giorni · record {{best}}",
+    "your_progress": "I tuoi progressi",
+    "close": "Chiudi Esplora",
+    "indicator_label": "Esplora: {{done}} funzioni provate su {{total}}",
+    "title": "Esplora",
+    "try_it": "Prova",
+    "mark_as_done": "Segna come fatto",
+    "streak_short_many": "Serie di {{count}} giorni",
+    "streak_days_one": "{{count}} giorno · record {{best}}",
+    "streak_short_other": "Serie di {{count}} giorni",
+    "notice_count_many": "{{count}} novità in Esplora",
+    "intro_video_watch": "Guarda",
+    "notice_one": "Raggiunto: {{title}}",
+    "indicator_label_streak_other": "Esplora: {{done}} funzioni provate su {{total}}, serie di {{count}} giorni",
+    "load_failed": "Impossibile caricare Esplora.",
+    "try_today": "Prova oggi",
+    "try_today_entry_many": "Prova oggi: {{count}} nuove funzioni",
+    "streak_days_many": "{{count}} giorni · record {{best}}",
+    "try_today_none": "Inizia da «Per iniziare», qui sotto.",
+    "badges": "Badge",
+    "getting_started": "Per iniziare",
+    "getting_started_brief": "Imposta un riepilogo mattutino",
+    "pill_count": "Esplora {{done}}/{{total}}",
+    "streak_short_one": "Serie di {{count}} giorno",
+    "indicator_label_streak_many": "Esplora: {{done}} funzioni provate su {{total}}, serie di {{count}} giorni",
+    "try_today_entry_one": "Prova oggi: {{count}} nuova funzione",
+    "all_tried": "Hai provato tutte le funzioni qui.",
+    "intro_video_close": "Chiudi video",
+    "intro_video_save_failed": "Impossibile salvare che hai guardato o chiuso questo video. Riprova.",
+    "try_today_entry_other": "Prova oggi: {{count}} nuove funzioni",
+    "notice_count_other": "{{count}} novità in Esplora",
+    "more_to_try": "Da vedere anche"
+  },
+  "milestone": {
+    "slack": {
+      "action": "Collega Slack",
+      "blurb": "Affidami lavoro anche da Slack",
+      "starter_prompt": "Collega Crew al mio Slack",
+      "title": "Slack collegato"
+    },
+    "crew_mode": {
+      "action": "Prova Ultra Mode",
+      "blurb": "Alcuni compagni lavorano insieme a un obiettivo",
+      "starter_prompt": "Dividi il lavoro che descrivo subito dopo tra alcuni compagni che lavorano in parallelo.",
+      "title": "Hai usato Ultra Mode"
+    },
+    "widgets": {
+      "action": "Crea un widget",
+      "blurb": "Trasforma i tuoi dati in una scheda cliccabile",
+      "starter_prompt": "Crea un widget che mostri il mio calendario di questa settimana",
+      "title": "Primo widget"
+    },
+    "parallel_chats": {
+      "starter_prompt": "Apri due chat insieme: una fa ricerca, l'altra scrive una scaletta",
+      "title": "Prime chat in parallelo",
+      "action": "Avvia due chat insieme",
+      "blurb": "Dividi un lavoro su più chat"
+    },
+    "pr_watch": {
+      "action": "Tieni d’occhio una pull request",
+      "blurb": "Sappi quando la CI diventa verde o arriva una revisione",
+      "starter_prompt": "Tieni d’occhio la PR che incollo subito dopo e dimmi quando la CI diventa verde.",
+      "title": "Prima PR sorvegliata"
+    },
+    "scheduled_task": {
+      "action": "Pianifica un’attività",
+      "blurb": "Parte in orario, come un riepilogo mattutino",
+      "starter_prompt": "Ogni mattina, fammi un riepilogo",
+      "title": "Prima attività pianificata"
+    },
+    "mate": {
+      "action": "Conosci il Mate, la tua guida",
+      "blurb": "Un compagno che ti aiuta a iniziare",
+      "starter_prompt": "Presentami il Mate",
+      "title": "Hai conosciuto il Mate"
+    },
+    "streak_best": {
+      "tier_one": "Serie di {{count}} giorno",
+      "tier_many": "Serie di {{count}} giorni",
+      "tier_other": "Serie di {{count}} giorni",
+      "title": "Serie migliore"
+    },
+    "chats_opened": {
+      "tier_many": "{{count}} chat",
+      "tier_other": "{{count}} chat",
+      "tier_one": "{{count}} chat",
+      "title": "Chat aperte"
+    }
   }
 }

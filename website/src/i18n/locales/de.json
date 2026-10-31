@@ -17400,7 +17400,10 @@
         "desktop_app": "Desktop-App",
         "keep_running_when_window_closed": "Nach dem Schließen des Fensters im Hintergrund weiterlaufen",
         "keep_running_when_window_closed_desc": "Beim Schließen des Fensters wird {{productName}} ausgeblendet, und deine Sitzungen und Jobs laufen weiter. Schalte dies aus, damit die Schließen-Schaltfläche die App beendet. Ein von dieser App gestartetes Gateway wird mit ihr beendet, ein Gateway, mit dem sie nur verbunden ist, läuft weiter.",
-        "keep_running_when_window_closed_save_failed": "Diese Einstellung konnte nicht gespeichert werden. Es wurde nichts geändert. Versuch es erneut."
+        "keep_running_when_window_closed_save_failed": "Diese Einstellung konnte nicht gespeichert werden. Es wurde nichts geändert. Versuch es erneut.",
+        "milestones_hint": "Zeigt Entdecken in der oberen Leiste und eine Karte „Heute ausprobieren“ in einem neuen Chat.",
+        "milestones": "Entdecken",
+        "milestones_save_failed": "Die Einstellung für Entdecken konnte nicht gespeichert werden. Versuch es noch einmal."
       },
       "importPanel": {
         "agent_data": "Agenten-Daten",
@@ -20909,5 +20912,93 @@
     "take_over_typing": "Übernehmen",
     "take_over_typing_label": "Das Tippen von {{name}} übernehmen. Der Entwurf dieser Person bleibt bei ihr.",
     "take_over_failed": "Das Tippen konnte nicht übernommen werden."
+  },
+  "milestones": {
+    "intro_video_title": "{{productName}} in 15 Sekunden",
+    "getting_started_result": "Ein erstes fertiges Ergebnis",
+    "group_streak": "Serie",
+    "notice_count_one": "{{count}} Neuigkeit in Entdecken",
+    "indicator_label_streak_one": "Entdecken: {{done}} von {{total}} Funktionen ausprobiert, {{count}} Tag in Folge",
+    "streak_days_other": "{{count}} Tage · Rekord {{best}}",
+    "your_progress": "Dein Fortschritt",
+    "close": "Entdecken schließen",
+    "indicator_label": "Entdecken: {{done}} von {{total}} Funktionen ausprobiert",
+    "title": "Entdecken",
+    "try_it": "Ausprobieren",
+    "mark_as_done": "Als erledigt markieren",
+    "streak_days_one": "{{count}} Tag · Rekord {{best}}",
+    "streak_short_other": "{{count}} Tage in Folge",
+    "intro_video_watch": "Ansehen",
+    "notice_one": "Erreicht: {{title}}",
+    "indicator_label_streak_other": "Entdecken: {{done}} von {{total}} Funktionen ausprobiert, {{count}} Tage in Folge",
+    "load_failed": "Entdecken konnte nicht geladen werden.",
+    "try_today": "Heute ausprobieren",
+    "try_today_none": "Fang unten mit „Erste Schritte“ an.",
+    "badges": "Abzeichen",
+    "getting_started": "Erste Schritte",
+    "getting_started_brief": "Ein Morgen-Briefing einrichten",
+    "pill_count": "Entdecken {{done}}/{{total}}",
+    "streak_short_one": "{{count}} Tag in Folge",
+    "try_today_entry_one": "Heute ausprobieren: {{count}} neue Funktion",
+    "all_tried": "Du hast alle Funktionen hier ausprobiert.",
+    "intro_video_close": "Video schließen",
+    "intro_video_save_failed": "Konnte nicht speichern, dass du dieses Video angesehen oder geschlossen hast. Versuch es noch einmal.",
+    "try_today_entry_other": "Heute ausprobieren: {{count}} neue Funktionen",
+    "notice_count_other": "{{count}} Neuigkeiten in Entdecken",
+    "more_to_try": "Auch einen Blick wert"
+  },
+  "milestone": {
+    "slack": {
+      "action": "Slack verbinden",
+      "blurb": "Gib mir Arbeit auch aus Slack",
+      "starter_prompt": "Verbinde Crew mit meinem Slack",
+      "title": "Slack verbunden"
+    },
+    "crew_mode": {
+      "action": "Ultra Mode ausprobieren",
+      "blurb": "Ein paar Teammitglieder arbeiten an einem Ziel",
+      "starter_prompt": "Teile die Aufgabe, die ich gleich beschreibe, auf ein paar Teammitglieder auf, die parallel arbeiten.",
+      "title": "Ultra Mode genutzt"
+    },
+    "widgets": {
+      "action": "Ein Widget bauen",
+      "blurb": "Mach aus deinen Daten eine klickbare Karte",
+      "starter_prompt": "Erstelle ein Widget, das meinen Kalender für diese Woche zeigt",
+      "title": "Erstes Widget"
+    },
+    "parallel_chats": {
+      "starter_prompt": "Öffne zwei Chats gleichzeitig: einer recherchiert, einer schreibt eine Gliederung",
+      "title": "Erste parallele Chats",
+      "action": "Zwei Chats gleichzeitig laufen lassen",
+      "blurb": "Teile eine Aufgabe auf mehrere Chats auf"
+    },
+    "pr_watch": {
+      "action": "Einen Pull Request beobachten",
+      "blurb": "Erfahre, wenn CI grün wird oder ein Review kommt",
+      "starter_prompt": "Behalte den PR im Blick, den ich gleich einfüge, und sag mir, wenn CI grün wird.",
+      "title": "Erster PR im Blick"
+    },
+    "scheduled_task": {
+      "action": "Eine Aufgabe planen",
+      "blurb": "Läuft pünktlich, etwa als Morgenbericht",
+      "starter_prompt": "Gib mir jeden Morgen ein Briefing",
+      "title": "Erste geplante Aufgabe"
+    },
+    "mate": {
+      "action": "Den Mate kennenlernen, deinen Guide",
+      "blurb": "Ein Teammitglied, das dir beim Start hilft",
+      "starter_prompt": "Stell mir den Mate vor",
+      "title": "Mate kennengelernt"
+    },
+    "streak_best": {
+      "tier_one": "{{count}} Tag in Folge",
+      "tier_other": "{{count}} Tage in Folge",
+      "title": "Längste Serie"
+    },
+    "chats_opened": {
+      "tier_other": "{{count}} Chats",
+      "tier_one": "{{count}} Chat",
+      "title": "Geöffnete Chats"
+    }
   }
 }
