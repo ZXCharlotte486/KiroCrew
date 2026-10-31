@@ -93,7 +93,7 @@ __all__ = [
 
 #: The SHA-256 of the shipped gate module, LF line endings. A copy with other bytes is
 #: never loaded.
-STRANDS_GATE_SHA256 = "c98689ad57d75534087b337fce62791940175164ebcdd5f177bcc518fa0f35f6"
+STRANDS_GATE_SHA256 = "bda169a7699fd2d03968935f1765bda6ae7ed16f37149fb9deb45aa515c3a80d"
 
 #: What the gate module names itself in its load marker; the routing table's probe.
 STRANDS_GATE_NAME = "kiro-crew-strands-gate"
