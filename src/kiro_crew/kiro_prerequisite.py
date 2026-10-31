@@ -183,6 +183,7 @@ if TYPE_CHECKING:  # every owner-defined name in _EXPORTS, for type checkers and
         AuditWriter,
         _audited_identity_probe,
         _audited_probe,
+        _kas_vault_verdict,
         _latch_login_only,
         _probe,
         _probe_acp_support,

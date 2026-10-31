@@ -43,6 +43,20 @@ AUTH_SQLITE_DB = "data.sqlite3"
 # whole DIRECTORY covers them without this list.
 AUTH_SQLITE_SIDECAR_SUFFIXES: tuple[str, ...] = ("-wal", "-shm", "-journal")
 
+# The ``auth_kv`` keys a kiro-cli / amazon-q store keeps a sign-in's token blob under.
+# One tuple for every reader of those rows (the usage reader and the shared sign-in
+# resolver), so their key sets cannot drift apart.
+AUTH_TOKEN_KEYS: tuple[str, ...] = (
+    "kirocli:odic:token",
+    "codewhisperer:odic:token",
+    "kirocli:social:token",
+    "kirocli:external-idp:token",
+)
+# The key above whose token is an External IdP token (sent with ``TokenType: EXTERNAL_IDP``).
+AUTH_EXTERNAL_IDP_TOKEN_KEY = "kirocli:external-idp:token"
+# The ``state`` row kiro-cli keeps its selected CodeWhisperer profile in.
+AUTH_PROFILE_STATE_KEY = "api.codewhisperer.profile"
+
 
 class Platform(enum.Enum):
     """The three platform families the stores are laid out for."""

@@ -107,7 +107,7 @@ from kiro_crew import hooks
 # The kiro-cli store is also read in this process through the shim; one SQLite
 # library keeps the other readers' locks when this connection closes.
 from kiro_crew._sqlite_compat import sqlite3
-from kiro_crew.identity_stores import Trust, sqlite_dbs
+from kiro_crew.identity_stores import AUTH_TOKEN_KEYS, Trust, sqlite_dbs
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +230,7 @@ _CLI_SQLITE_DBS = sqlite_dbs(Trust.TRUSTED)
 # absent. Untrusted either way (``from_cli_store=False``), so this widens what
 # can be READ for credit reporting, never what is believed.
 _OTHER_SQLITE_DBS = sqlite_dbs(Trust.OTHER)
-_SQLITE_TOKEN_KEYS = ("kirocli:odic:token", "codewhisperer:odic:token", "kirocli:social:token", "kirocli:external-idp:token")
+_SQLITE_TOKEN_KEYS = AUTH_TOKEN_KEYS
 
 # SEL audit label for the SQLite live-token read. Not an allowlist entry (that
 # gate is for sensitive-path reads via safe_read_file_internal); this is only

@@ -299,6 +299,40 @@ def _latch_login_only(
     return self._status
 
 
+def _kas_vault_verdict() -> bool | None:
+    """On the KAS harness with Crew's vault as the sign-in: is it usable? Blocking.
+
+    The spawn owner's own question (:func:`kiro_crew.auth.bridge.vault_holds_identity`)
+    answered with the shared resolver's oss pick. ``None`` when kiro-cli's answer
+    decides instead: another harness (kiro-cli's own harness needs kiro-cli's
+    sign-in) or an empty vault. When the vault is the sign-in (or the harness cannot
+    be read), a lapsed or unreadable entry is ``False``, never kiro-cli's verdict.
+    """
+    try:
+        from kiro_crew.acp_backends import ACP_BACKEND_KAS
+        from kiro_crew.config.loader import KiroCrewConfig
+
+        runs_on_kas = KiroCrewConfig.load().agent.acp_backend == ACP_BACKEND_KAS
+        if not runs_on_kas:
+            return None
+    except Exception:  # noqa: BLE001 - a status read never raises
+        # The harness is unknown, so it may be KAS: a stored vault entry still
+        # decides, so a lapsed one never borrows kiro-cli's verdict.
+        logger.debug("KAS harness check failed", exc_info=True)
+    from kiro_crew.auth.bridge import vault_holds_identity
+
+    if not vault_holds_identity(warn=False):
+        return None
+    try:
+        from kiro_crew import enterprise_sign_in as sign_in
+
+        chosen = sign_in.select(policy=sign_in.OSS)
+        return chosen.source is sign_in.Source.VAULT and chosen.problem is None
+    except Exception:  # noqa: BLE001 - the vault is the sign-in and cannot be read
+        logger.debug("KAS vault sign-in check failed", exc_info=True)
+        return False
+
+
 async def _probe(
     self: KiroPrerequisiteService, *, force: bool = False, login_only: bool = False
 ) -> PrerequisiteStatus:
@@ -572,16 +606,22 @@ async def _probe(
         # check for a too-old relay binary even when signed out.
         acp_supported = await self._probe_acp_support(self._viable_binary)
         login_cmd, sso_cmd, bundled = login_commands_for(self._viable_binary, self._environ)
+        # On the KAS harness the session signs in the way the spawn does: when the
+        # vault holds the sign-in, its state alone decides (a live kiro-cli login
+        # must not stand in for a lapsed vault the spawn will still use);
+        # otherwise kiro-cli's own answer (whoami) does.
+        vault_verdict = await asyncio.to_thread(_kas_vault_verdict)
+        signed_in = whoami.ok if vault_verdict is None else vault_verdict
         self._status = PrerequisiteStatus(
             platform=_platform_label(self._platform),
             installed=True,
-            authenticated=whoami.ok,
+            authenticated=signed_in,
             # A required spec the CLI refuses fails every turn, exactly like
             # one that is absent, so it narrows readiness the same way. A CLI
             # without the ``acp`` subcommand cannot start ANY session, so it
             # narrows readiness too — but its remedy is an update, not a spec
             # rewrite, so it is tracked separately from ``repair_required``.
-            ready=whoami.ok and not rejected and acp_supported,
+            ready=signed_in and not rejected and acp_supported,
             repair_required=bool(rejected),
             initial_setup_complete=self._initial_setup_complete,
             login_command=login_cmd,
