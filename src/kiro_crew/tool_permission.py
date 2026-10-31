@@ -70,7 +70,7 @@ from types import MappingProxyType
 from typing import Any, ClassVar, Literal, Protocol
 
 from kiro_crew import name_grant
-from kiro_crew.constants import DENY_CAUSE_POLICY
+from kiro_crew.constants import DENY_CAUSE_BATCH_READ_WRITE, DENY_CAUSE_POLICY
 from kiro_crew.executors import run_in_tool_gate_pool
 from kiro_crew.hooks import TOOL_AUTO_APPROVE, TOOL_DENY, identity_grant_covers_child
 from kiro_crew.llm_helpers import _steer_host_deny
@@ -535,6 +535,15 @@ async def _allow(
     policy.narrator.allowed(ask, sent)
     settled = Settled(outcome if sent else "floor_refused", rung, by)
     policy.audit.approved(ask, settled)
+    if not sent:
+        # The transport's batch write guard (``acp.batch_guard``) refuses through
+        # the floor branch; its reason is a host refusal with a cause the run's
+        # recovery path reads, so it is settled as one rather than as a bare
+        # floor refusal. The audit row above records the transport's rejection.
+        take = getattr(ask.wire, "batch_refusal", None)
+        reason = take(ask) if take is not None else None
+        if reason:
+            return Settled("refused", rung, "host", DENY_CAUSE_BATCH_READ_WRITE, reason)
     return settled
 
 
@@ -561,6 +570,18 @@ class AcpWire:
             withdrawal["withdraw_if"] = stopping
         sent = await self.client.approve_tool(ask.request_id, **withdrawal)
         return sent is not False
+
+    def batch_refusal(self, ask: Ask) -> str | None:
+        """The batch write guard's reason for the approval it just refused, if any.
+
+        Asked of the client itself (``take_batch_refusal``), so a provider that
+        wraps the transport hands the question to the transport holding the
+        reason; a client without the method has nothing to say."""
+        take = getattr(self.client, "take_batch_refusal", None)
+        if take is None:
+            return None
+        reason = take(ask.request_id)
+        return reason if isinstance(reason, str) else None
 
     async def refuse(self, ask: Ask, notice: Notice | None) -> None:
         if notice is not None:
