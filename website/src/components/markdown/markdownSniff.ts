@@ -52,3 +52,18 @@ export function looksLikeMarkdown(content: string): boolean {
 export function isGenericLang(lang: string | undefined): boolean {
   return GENERIC_LANGS.has((lang ?? '').toLowerCase())
 }
+
+/** Languages whose fenced content IS markdown, so a rendered view is
+ *  meaningful. Kept in sync with `NESTABLE_LANGS` in useBlockAssembler for the
+ *  markup/doc subset a reader would want rendered — mdx is included because its
+ *  markdown structure still renders, its JSX just passes through as text. */
+const MARKDOWN_LANGS = new Set(['markdown', 'md', 'mdx'])
+
+/** A ```markdown fence, or an untagged / generic one whose content is clearly
+ *  markdown. Any real language (```python, ```bash) is never sniffed. The chat
+ *  renders such a fence, once complete, as a formatted markdown card; message
+ *  actions read it the same way (messageActions/messageText.ts). */
+export function isMarkdownBlock(lang: string | undefined, content: string): boolean {
+  if (lang != null && MARKDOWN_LANGS.has(lang.toLowerCase())) return true
+  return isGenericLang(lang) && looksLikeMarkdown(content)
+}

@@ -4,6 +4,7 @@ import { Copy, ClipboardType, Check, Code, Eye, ClipboardList, CheckCircle, Refr
 import { lazy, Suspense } from 'react'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../../components/ui/dropdown-menu'
 import MessageContextMenu, { type MessageMenuItem } from './MessageContextMenu'
+import MessageActionMenuItems, { useMessageActionsFor, useMessageActionsLoadFailed } from '../../messageActions/MessageActionMenuItems'
 import { copyRichToClipboard, copyToClipboard } from '../../utils/clipboard'
 import { markdownToCleanHtml } from '../../components/markdown/richTextClipboard'
 import { stripKeepVisibleMarker } from '../../app-sdk/protocol/keepVisibleMarker'
@@ -429,7 +430,11 @@ const AssistantMessage = memo(function AssistantMessage({ content, isStreaming, 
   // Same text Copy copies: the keep-visible marker is a transcript control,
   // not part of the reply, so a quote must not hand it to the model.
   const quoteShown = () => onQuoteMessage?.(quotableText)
-  const menuAvailable = oldMenuContext || hasSpeak || threadRow || quoteOffered
+  // App message actions (`contributes.messageActions`) the owner approved for
+  // replies: rows at the end of More, never row buttons.
+  const appActions = useMessageActionsFor('assistant', !isStreaming && showFooter && quotableText.length > 0)
+  const appActionsFailed = useMessageActionsLoadFailed(!isStreaming && showFooter && quotableText.length > 0)
+  const menuAvailable = oldMenuContext || hasSpeak || threadRow || quoteOffered || appActions.length > 0 || appActionsFailed
   useEffect(() => {
     if (!menuAvailable || isStreaming || !showFooter) setOverflowOpen(false)
   }, [isStreaming, menuAvailable, showFooter])
@@ -624,6 +629,7 @@ const AssistantMessage = memo(function AssistantMessage({ content, isStreaming, 
               </span>
             </DropdownMenuItem>
           )}
+          <MessageActionMenuItems actions={appActions} messageRole="assistant" markdown={quotableText} anchor={() => contentRef.current} />
         </DropdownMenuContent>
       </DropdownMenu>
   ) : null

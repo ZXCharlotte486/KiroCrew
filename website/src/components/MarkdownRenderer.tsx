@@ -94,7 +94,7 @@ import { MarkdownTable } from './markdown/MarkdownTable'
 import { ImgWithFallback } from './markdown/ImgWithFallback'
 import { DeferredMedia, MdSourceEl } from './markdown/remoteMedia'
 import { MermaidBlock } from './markdown/MermaidBlock'
-import { isGenericLang, looksLikeMarkdown } from './markdown/markdownSniff'
+import { isMarkdownBlock } from './markdown/markdownSniff'
 import { ALLOWED_TAGS, VERBATIM_CONTENT_TAGS, rehypeSanitize, remarkVerbatimUnknownTags } from './markdown/sanitize'
 import { holdsSessionRef, rehypeMarkFencedCode, rehypeSessionRefPunctuation, rehypeSourcepos, rehypeStableRootKeys, rehypeUnwrapBlocks, remarkSoftBreaks, SESSION_REF_TRAILING } from './markdown/treeTransforms'
 import { GLOW_TAIL_CHARS, REVEAL_IDLE_SETTLE_MS, rehypeStreamingCaret, rehypeStreamingGlow, rehypeStreamingReveal } from './markdown/streamingEffects'
@@ -644,7 +644,9 @@ const REMARK_PLUGINS: PluggableList = [
 // hast conversion can overflow on it.
 // `rehypeSessionRefPunctuation` runs after the sanitizer so the marker it
 // stamps is the only one a session reference can carry into `MdAnchor` / `InlineCode`.
-const REHYPE_PLUGINS: PluggableList = [rehypeBoundRawDepth, [rehypeRaw, { passThrough: ['math', 'inlineMath'] }], rehypeMarkFencedCode, rehypeUnwrapBlocks, rehypeSanitize, rehypeSessionRefPunctuation, rehypeKatex]
+// Everything up to and including the sanitizer: the tree whose text the reader sees.
+const REHYPE_SANITIZED: PluggableList = [rehypeBoundRawDepth, [rehypeRaw, { passThrough: ['math', 'inlineMath'] }], rehypeMarkFencedCode, rehypeUnwrapBlocks, rehypeSanitize]
+const REHYPE_PLUGINS: PluggableList = [...REHYPE_SANITIZED, rehypeSessionRefPunctuation, rehypeKatex]
 
 // User-message variant: base remark chain plus soft-break → hard-break.
 const REMARK_PLUGINS_WITH_BREAKS: PluggableList = [...REMARK_PLUGINS, remarkSoftBreaks]
@@ -834,21 +836,9 @@ function deferIncompleteStreamingTable(content: string): string {
 
 const noSubscribe = () => () => {}
 
-const MarkdownBlock = memo(function MarkdownBlock({ content, sourcePos, startLine, glow, smooth, softBreaks, live, unfurl, markers }: { content: string; sourcePos?: boolean; startLine?: number; glow?: boolean; smooth?: boolean; softBreaks?: boolean; live?: boolean; unfurl?: boolean; markers?: RedactionMarkers }) {
-  useLanguageGeneration() // memo() bails out of the provider-level repaint; subscribe directly
-  const textPreviews = useContext(TextPreviewsCtx) > 0 && !sourcePos
-  // Declared before the early return below — Rules of Hooks.
-  //
-  // `sourcePos` force-disables unfurl: the inline-commenting flow maps a DOM
-  // selection back to source coordinates through `data-sourcepos`, and a card
-  // REPLACES the `<p>` that carries it, so a standalone link would become an
-  // uncommentable hole. The two are mutually exclusive in practice today (only
-  // the chat transcript enables previews, and it renders without sourcepos) —
-  // this makes that a guarantee instead of a coincidence.
-  const unfurlCtx = useMemo<LinkUnfurl>(
-    () => ({ enabled: !!unfurl && !sourcePos, live: !!live }),
-    [unfurl, sourcePos, live],
-  )
+/** A prose block's source, cleaned the way `MarkdownBlock` cleans it before
+ *  deciding whether anything is left to draw. */
+function cleanProseSource(content: string, sourcePos: boolean, glow: boolean): string {
   // Strip any <mcwidget> or <tool_use> tags that leak through during
   // streaming transitions or when the agent emits protocol markup as text.
   // Both passes preserve mentions inside inline-code spans.
@@ -870,6 +860,58 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, sourcePos, startLin
   // incomplete trailing table so it doesn't paint as pipe text then snap into a
   // <table> when the delimiter row arrives.
   if (glow) clean = deferIncompleteStreamingTable(clean)
+  return clean
+}
+
+/** The cleaned source repaired into the exact text `MarkdownBlock` parses. */
+function repairProseSource(clean: string, sourcePos: boolean): string {
+  // `fixCodeFences` runs FIRST: its later passes CREATE code blocks the raw
+  // source did not have (blank line before a fence glued to preceding text,
+  // splitting a closing fence glued to trailing text). Rewriting boundaries
+  // before that would judge such a region as prose and leave a literal `<…>`
+  // inside what ends up displayed as code.
+  //
+  // `sourcePos` mode maps a DOM selection back to source coordinates through
+  // `data-sourcepos` for inline commenting. fixCjkAutolinkBoundaries inserts two
+  // characters per fixed URL, which shifts every later column on that line and
+  // would anchor a comment to the wrong occurrence — so that surface keeps the
+  // unfixed (but coordinate-accurate) render.
+  const fenced = fixCodeFences(clean)
+  // `fixUnencodedLinkDestinations` runs BEFORE the CJK pass: repairing a
+  // refused `[text](url)` turns the URL's autolinked head back into a real
+  // link node, so the CJK boundary pass must judge the repaired shape, not
+  // the broken one. Both passes shift columns, so both are gated off in
+  // sourcePos mode together.
+  return sourcePos ? fenced : fixCjkAutolinkBoundaries(fixUnencodedLinkDestinations(fenced))
+}
+
+/**
+ * What the chat transcript draws for one finished prose block, without React:
+ * the source `MarkdownBlock` parses and the remark and rehype chains it parses
+ * with, up to and including the sanitizer. For a reader that must see exactly
+ * what the chat shows (messageActions/messageText.ts), so it shares every pass
+ * instead of copying them.
+ */
+export function chatProsePipeline(content: string): { source: string; remark: PluggableList; rehype: PluggableList } {
+  return { source: repairProseSource(cleanProseSource(content, false, false), false), remark: REMARK_PLUGINS, rehype: REHYPE_SANITIZED }
+}
+
+const MarkdownBlock = memo(function MarkdownBlock({ content, sourcePos, startLine, glow, smooth, softBreaks, live, unfurl, markers }: { content: string; sourcePos?: boolean; startLine?: number; glow?: boolean; smooth?: boolean; softBreaks?: boolean; live?: boolean; unfurl?: boolean; markers?: RedactionMarkers }) {
+  useLanguageGeneration() // memo() bails out of the provider-level repaint; subscribe directly
+  const textPreviews = useContext(TextPreviewsCtx) > 0 && !sourcePos
+  // Declared before the early return below — Rules of Hooks.
+  //
+  // `sourcePos` force-disables unfurl: the inline-commenting flow maps a DOM
+  // selection back to source coordinates through `data-sourcepos`, and a card
+  // REPLACES the `<p>` that carries it, so a standalone link would become an
+  // uncommentable hole. The two are mutually exclusive in practice today (only
+  // the chat transcript enables previews, and it renders without sourcepos) —
+  // this makes that a guarantee instead of a coincidence.
+  const unfurlCtx = useMemo<LinkUnfurl>(
+    () => ({ enabled: !!unfurl && !sourcePos, live: !!live }),
+    [unfurl, sourcePos, live],
+  )
+  const clean = cleanProseSource(content, !!sourcePos, !!glow)
   if (!clean.trim()) return null
   const baseRehype = sourcePos ? REHYPE_PLUGINS_WITH_SOURCEPOS : REHYPE_PLUGINS
   // Streaming tail block only (see MarkdownRenderer's `glow` prop):
@@ -896,24 +938,7 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, sourcePos, startLin
   // an earlier position would let a later plugin read `div` where it expects the
   // block itself.
   rehypePlugins = [...rehypePlugins, rehypeStableRootKeys]
-  // `fixCodeFences` runs FIRST: its later passes CREATE code blocks the raw
-  // source did not have (blank line before a fence glued to preceding text,
-  // splitting a closing fence glued to trailing text). Rewriting boundaries
-  // before that would judge such a region as prose and leave a literal `<…>`
-  // inside what ends up displayed as code.
-  //
-  // `sourcePos` mode maps a DOM selection back to source coordinates through
-  // `data-sourcepos` for inline commenting. fixCjkAutolinkBoundaries inserts two
-  // characters per fixed URL, which shifts every later column on that line and
-  // would anchor a comment to the wrong occurrence — so that surface keeps the
-  // unfixed (but coordinate-accurate) render.
-  const fenced = fixCodeFences(clean)
-  // `fixUnencodedLinkDestinations` runs BEFORE the CJK pass: repairing a
-  // refused `[text](url)` turns the URL's autolinked head back into a real
-  // link node, so the CJK boundary pass must judge the repaired shape, not
-  // the broken one. Both passes shift columns, so both are gated off in
-  // sourcePos mode together.
-  const prepared = sourcePos ? fenced : fixCjkAutolinkBoundaries(fixUnencodedLinkDestinations(fenced))
+  const prepared = repairProseSource(clean, !!sourcePos)
   const md = (
     <MdSourceCtx.Provider value={prepared}>
       <ReactMarkdown remarkPlugins={textPreviews ? (softBreaks ? REMARK_PLUGINS_WITH_BREAKS_TEXT_PREVIEWS : REMARK_PLUGINS_TEXT_PREVIEWS) : (softBreaks ? REMARK_PLUGINS_WITH_BREAKS : REMARK_PLUGINS)} rehypePlugins={rehypePlugins} urlTransform={urlTransform} components={MD_COMPONENTS}>
@@ -929,22 +954,6 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, sourcePos, startLin
   // instantiates deep inside its own tree — can see the gate.
   return <LinkUnfurlCtx.Provider value={unfurlCtx}>{body}</LinkUnfurlCtx.Provider>
 })
-
-/** Languages whose fenced content IS markdown, so a rendered view is
- *  meaningful. Kept in sync with `NESTABLE_LANGS` in useBlockAssembler for the
- *  markup/doc subset a reader would want rendered — mdx is included because its
- *  markdown structure still renders, its JSX just passes through as text. */
-const MARKDOWN_LANGS = new Set(['markdown', 'md', 'mdx'])
-function isMarkdownLang(lang?: string): boolean {
-  return lang != null && MARKDOWN_LANGS.has(lang.toLowerCase())
-}
-
-/** A ```markdown fence, or an untagged / generic one whose content is clearly
- *  markdown. Any real language (```python, ```bash) is never sniffed. */
-function isMarkdownBlock(lang: string | undefined, content: string): boolean {
-  if (isMarkdownLang(lang)) return true
-  return isGenericLang(lang) && looksLikeMarkdown(content)
-}
 
 /** A markdown content card in the chat transcript: a ```markdown fence with a
  *  Formatted | Raw view toggle in the upper right, matching the segmented

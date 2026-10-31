@@ -1,6 +1,7 @@
 """App frames: the one sandboxed document model every frame-backed contribution point uses.
 
-A point that draws app UI beside the conversation (today ``contributes.linkPreviews``)
+A point that draws app UI beside the conversation (``contributes.linkPreviews``,
+``contributes.messageActions``)
 never runs app code in the dashboard's document. It runs in an iframe that is
 ``sandbox="allow-scripts"`` with no ``allow-same-origin``, so its origin is opaque:
 it cannot read the dashboard's DOM, its cookies or its token, and the dashboard
@@ -67,6 +68,7 @@ from aiohttp import web
 
 from kiro_crew.apps.link_preview_grants import link_preview_grant_row
 from kiro_crew.apps.manager import get_app_manifest, is_app_enabled, resolve_mcp_backend_url
+from kiro_crew.apps.message_action_grants import approved_message_action
 from kiro_crew.sel import sel
 
 if TYPE_CHECKING:
@@ -741,8 +743,57 @@ const POINT = {
 #: The link-preview frame's whole bootstrap; one name for its tests.
 _BOOTSTRAP = _RUNTIME + _INVOCATION + _LINK_PREVIEW_POINT
 
+
+# ---------------------------------------------------------------------------
+# Point: messageActions
+# ---------------------------------------------------------------------------
+
+
+def _message_action_entry(name: str, action_id: str) -> FrameEntry | None:
+    """One message action's served entry: declared, and at least one role approved."""
+    if not is_app_enabled(name):
+        return None
+    manifest = get_app_manifest(name)
+    if manifest is None or manifest.name != name:
+        return None
+    action = next((a for a in manifest.contributes.messageActions if a.id == action_id), None)
+    entry = clean_entry(action.entry) if action is not None else None
+    if entry is None:
+        return None
+    # No approved role: the action is not offered, so its frame is not served.
+    if approved_message_action(name, manifest, action_id) is None:
+        return None
+    return entry, process_backed(manifest), manifest.name
+
+
+def _resolve_message_action(name: str, action_id: str) -> FrameEntry | None:
+    return _message_action_entry(name, action_id)
+
+
+# A message action. One invocation per click: the host's `message.invoke` carries
+# the one message's text and the invocation id, and the handler gets that
+# invocation's frozen controls (the shared contract in `_INVOCATION`).
+_MESSAGE_ACTION_POINT = r"""
+const POINT = {
+  ctx: { appName: CFG.app, theme: () => CFG.theme, fetch: capFetch },
+  accepts: (h) => !!h && typeof h.invoke === 'function',
+  missing: 'activate(ctx) returned no handler with invoke()',
+  message(m) {
+    if (m.type !== 'message.invoke' || typeof m.invocationId !== 'string') return;
+    const message = {
+      text: typeof m.text === 'string' ? m.text : '',
+      format: m.format === 'markdown' ? 'markdown' : 'plain',
+      truncated: m.truncated === true,
+      role: m.role === 'user' ? 'user' : 'assistant',
+    };
+    call('invoke', message, invocationControls(m.invocationId));
+  },
+};
+"""
+
 # Registered points. A new frame-backed point adds its resolver and script here.
 register_frame_point("linkPreviews", _resolve_link_preview, _LINK_PREVIEW_POINT)
+register_frame_point("messageActions", _resolve_message_action, _MESSAGE_ACTION_POINT)
 
 
 __all__: list[str] = [
