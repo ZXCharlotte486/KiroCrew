@@ -543,7 +543,9 @@ in an oss build). One fetch is the Kiro control plane's
   an accepted residual.
 - **Signing in first.** `kirocrew kas login`, `whoami`, `logout` and `route` (the
   read-only lookup a remote sign-in runs first) run when the policy load fails, so the
-  sign-in the fetch needs can be created. Every other command still exits.
+  sign-in the fetch needs can be created. A `gateway` start whose load failed only
+  because nobody is signed in serves the sign-in-only app first (platform-context.md,
+  "Enterprise gate"), then loads the rules again. Every other command still exits.
 
 A test address needs its own build.
 

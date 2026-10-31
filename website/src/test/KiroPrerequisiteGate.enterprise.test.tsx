@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import KiroPrerequisiteGate, {
   kiroPrerequisiteIsBlocking,
   kiroPrerequisiteRefetchInterval,
+  signInHandoffStopped,
 } from '../components/KiroPrerequisiteGate'
 import Modal from '../components/Modal'
 import { LocalOverlayRoot } from '../components/overlayRoot'
@@ -30,6 +31,7 @@ vi.mock('../api/client', async () => ({
     acpBackends: vi.fn(),
     acpBackendRecheck: vi.fn(),
     patchConfig: vi.fn(),
+    kasLoginStatus: vi.fn(),
   },
 }))
 
@@ -58,6 +60,73 @@ describe('KiroPrerequisiteGate enterprise login gate', () => {
     expect(kiroPrerequisiteIsBlocking(status({ ...locked, ready: true }))).toBe(true)
     expect(kiroPrerequisiteRefetchInterval(status({ ...locked, ready: true }))).toBe(5_000)
     expect(kiroPrerequisiteRefetchInterval(status({ ready: true }))).toBe(30_000)
+  })
+
+  it('shows Crew sign-in on a signed-out sign-in-only gateway, then waits for it to boot', async () => {
+    vi.mocked(api.kiroPrerequisite).mockResolvedValue(
+      status({ ...locked, enterprise_sign_in_only: true }),
+    )
+    vi.mocked(api.kasLoginStatus).mockResolvedValue({
+      authenticated: false, provider: null, identity: null, transport: 'device',
+    })
+    const { unmount } = renderGate()
+    // Only an organisation sign-in can load the rules: Company SSO alone, already open.
+    // Lost-run bound: two chained queries (the prerequisite status, then the
+    // sign-in status the mounted KasLoginGate reads) resolve before this renders.
+    expect(await screen.findByTestId('kas-login-sso-form', undefined, { timeout: 10_000 })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue with Google' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Dashboard loaded')).not.toBeInTheDocument()
+    unmount()
+
+    vi.mocked(api.kasLoginStatus).mockResolvedValue({
+      authenticated: true, provider: 'idc', identity: 'identity_center', transport: 'device',
+    })
+    renderGate()
+    // Same two-query chain as above, so the same lost-run bound.
+    expect(
+      await screen.findByRole('status', { name: 'Your crew is almost ready.' }, { timeout: 10_000 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Dashboard loaded')).not.toBeInTheDocument()
+  })
+
+  it('reads a failing poll as a stopped start only past the hand-off window', () => {
+    expect(signInHandoffStopped(null, 500_000)).toBe(false)
+    expect(signInHandoffStopped(0, 60_000)).toBe(false)
+    expect(signInHandoffStopped(0, 121_000)).toBe(true)
+  })
+
+  it('says the gateway stopped when the start after sign-in never answers', async () => {
+    vi.mocked(api.kiroPrerequisite)
+      .mockResolvedValueOnce(status({ ...locked, enterprise_sign_in_only: true }))
+      .mockRejectedValue(new Error('Failed to fetch'))
+    vi.mocked(api.kasLoginStatus).mockResolvedValue({
+      authenticated: true, provider: 'idc', identity: 'identity_center', transport: 'device',
+    })
+    const { queryClient } = renderGate()
+    // Lost-run bound: the prerequisite and sign-in status queries resolve in turn.
+    expect(
+      await screen.findByRole('status', { name: 'Your crew is almost ready.' }, { timeout: 10_000 }),
+    ).toBeInTheDocument()
+    // Pinned clock: the first failed poll starts the hand-off window...
+    const firstFailure = 1_000_000
+    const now = vi.spyOn(Date, 'now').mockReturnValue(firstFailure)
+    try {
+      await act(async () => {
+        await queryClient.refetchQueries({ queryKey: ['kiro-prerequisite'] })
+      })
+      expect(screen.queryByTestId('enterprise-gateway-stopped')).not.toBeInTheDocument()
+      // ...and a poll still failing past it means the start failed and exited.
+      now.mockReturnValue(firstFailure + 121_000)
+      await act(async () => {
+        await queryClient.refetchQueries({ queryKey: ['kiro-prerequisite'] })
+      })
+      expect(
+        await screen.findByTestId('enterprise-gateway-stopped', undefined, { timeout: 10_000 }),
+      ).toHaveTextContent('stopped')
+    } finally {
+      now.mockRestore()
+    }
   })
 
   it('shows the sign-in step instead of the dashboard for an established install', async () => {

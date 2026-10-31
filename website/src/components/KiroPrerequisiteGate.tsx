@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Download,
   ExternalLink,
+  Loader2,
   Package,
   RefreshCw,
   ShieldCheck,
@@ -23,6 +24,7 @@ import { clearCachedModels } from '../providers/adapters/acp'
 import { safeGetItem, safeSetItem } from '../utils/safeStorage'
 import { Btn, Card, SendBtn } from './ui'
 import ErrorNotice from './ErrorNotice'
+import KasLoginGate from './KasLoginGate'
 import RelockNotice, { BARE_LOGIN_COMMAND } from './KiroPrerequisiteRelockNotice'
 import { KiroUnzipPrerequisite } from './KiroUnzipPrerequisite'
 import RemoteCrewSetupSkip from './RemoteCrewSetupSkip'
@@ -38,6 +40,16 @@ import {
 import { Trans } from 'react-i18next'
 import { i18nT } from '../i18n/t'
 const QUERY_KEY = ['kiro-prerequisite'] as const
+// The longest a sign-in-only gateway's hand-off to the real gateway may leave the
+// status unanswered: the rules fetch and sign-in refresh bound the start well
+// under this. Past it, the start failed.
+const SIGN_IN_HANDOFF_GRACE_MS = 120_000
+
+/** Whether a sign-in-only gateway's start has failed: its status poll has been
+ *  failing (since *failingSince*) for longer than the hand-off can take. */
+export function signInHandoffStopped(failingSince: number | null, now: number): boolean {
+  return failingSince !== null && now - failingSince > SIGN_IN_HANDOFF_GRACE_MS
+}
 
 export function kiroPrerequisiteRefetchInterval(
   status: KiroPrerequisiteStatus | undefined,
@@ -1447,6 +1459,15 @@ export default function KiroPrerequisiteGate({ children }: { children: ReactNode
   // The enterprise login gate refuses both reads below, and the sign-in screen
   // needs neither, so they wait until it opens.
   const enterpriseLocked = statusQuery.data?.enterprise_login_required === true
+  // A sign-in-only gateway's status poll failing since this time (null while it
+  // answers). Counted from the first failed poll, not the last answer: a poll
+  // paused while the tab is hidden (approving SSO in another tab) is no failure.
+  const signInOnly = statusQuery.data?.enterprise_sign_in_only === true
+  const [failingSince, setFailingSince] = useState<number | null>(null)
+  useEffect(() => {
+    if (signInOnly && statusQuery.isError) setFailingSince(since => since ?? Date.now())
+    else setFailingSince(null)
+  }, [signInOnly, statusQuery.isError, statusQuery.errorUpdatedAt])
   const kiroNotReady = !!statusQuery.data && !statusQuery.data.ready && !enterpriseLocked
   const configQuery = useQuery<{ agent?: { acp_backend?: string } }>({
     queryKey: CONFIG_QUERY_KEY,
@@ -1582,6 +1603,39 @@ export default function KiroPrerequisiteGate({ children }: { children: ReactNode
     && statusQuery.error.status === 404
   ) {
     return app()
+  }
+  // Enterprise build, nobody signed in: the gateway is a sign-in-only app that
+  // serves Crew's own sign-in and nothing else. Once a sign-in lands it boots for
+  // real, and the next status read comes from that gateway.
+  if (signInOnly) {
+    const starting = i18nT('components.kiroPrerequisiteGate.your_crew_is_almost_ready')
+    const aside = i18nT('components.kiroPrerequisiteGate.enterprise_sign_in_aside')
+    // After sign-in the gateway hands its port to the real one, which loads the
+    // rules first; the status poll fails until it answers. Failing for longer
+    // than any start can take means the start failed and the process exited.
+    // Shown whatever the sign-in screen last read, so a sign-in made elsewhere
+    // (the CLI) still reaches it.
+    if (signInHandoffStopped(failingSince, Date.now())) {
+      return (
+        <SetupShell asideHeadline={starting} asideBody={aside}>
+          <ErrorNotice
+            testId="enterprise-gateway-stopped"
+            title={i18nT('components.kiroPrerequisiteGate.enterprise_gateway_stopped_title')}
+            message={i18nT('components.kiroPrerequisiteGate.enterprise_gateway_stopped_body')}
+            noHandoffReason="the gateway process exited, so no agent is running to receive a hand-off"
+          />
+        </SetupShell>
+      )
+    }
+    return (
+      <KasLoginGate organisationOnly>
+        <SetupShell asideHeadline={starting} asideBody={aside}>
+          <div role="status" aria-label={starting} className="flex justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted" aria-hidden="true" />
+          </div>
+        </SetupShell>
+      </KasLoginGate>
+    )
   }
   // No usable status: either a live gateway error or an unusable body. Both are
   // "we cannot tell". A RETURNING user keeps their dashboard, fully usable —

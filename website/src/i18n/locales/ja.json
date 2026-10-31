@@ -7318,6 +7318,8 @@
       "enterprise_start_url_label": "組織のスタート URL",
       "enterprise_start_url_hint": "先に入力してください。下のコマンドに反映され、コピーできるようになります。これは AWS アクセスポータルのアドレスで、IT チームが知っています。",
       "enterprise_sign_in_aside": "このゲートウェイで組織のアカウントに一度サインインすれば、あとは {{productName}} に任せられます。",
+      "enterprise_gateway_stopped_title": "{{productName}} が停止しました",
+      "enterprise_gateway_stopped_body": "サインイン後、組織のルールを読み込めませんでした。理由は起動したターミナルに表示されています。それを解決してから、{{productName}} をもう一度起動してください。",
       "relock_ask_owner": "{{productName}} の所有者に、このゲートウェイで再度サインインするよう依頼してください。サインインすると、この通知は自動的に消えます。",
       "relock_enterprise_new_window": "もう一度サインインするには、新しいウィンドウまたはタブでダッシュボードを開いてください。サインイン画面にコピーボタン付きでコマンドが表示されます。このウィンドウの作業はそのまま残ります。",
       "relock_exact_command_hint": "このゲートウェイは独自の Kiro CLI を使っています。再度サインインするには、新しいウィンドウまたはタブでダッシュボードを開いてください。そのサインイン画面に正確なコマンドがコピーボタン付きで表示されます。このウィンドウの作業はそのまま残ります。",

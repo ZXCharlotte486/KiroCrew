@@ -120,6 +120,50 @@ def _is_sign_in_command(args: argparse.Namespace) -> bool:
     )
 
 
+def _serve_sign_in_first(args: argparse.Namespace, exc: BaseException) -> int | None:
+    """Gateway boot failed for *exc*: show the sign-in screen first if nobody is signed in.
+
+    The port the sign-in screen used, once a sign-in landed and the platform then
+    booted; None, having done nothing, for any other failure and in an ``oss``
+    build. A second boot that fails exits (``kiro_crew.enterprise_signin_gateway``).
+    """
+    from kiro_crew import enterprise_signin_gateway as signin
+
+    # A test or scripted start (`--test-mode`, `--json-ready`) waits for a ready
+    # line, not a browser sign-in, so it gets the refusal exit as before.
+    if getattr(args, "test_mode", False) or getattr(args, "json_ready", False):
+        return None
+    if not signin.applies(exc):
+        return None
+    from kiro_crew.cli_gateway_boot import _resolve_gateway_args
+    from kiro_crew.config.loader_credentials import CRED_OWNER_ID
+    from kiro_crew.dashboard.urls import parse_dashboard_url
+
+    # The same checked flags the gateway itself starts with: a bad `--port`
+    # exits 2 with its usual message here too, before anything binds.
+    gw = _resolve_gateway_args(args)
+    cfg = KiroCrewConfig.load()
+    # Open a browser only when the normal gateway would: not with `--no-open` or
+    # `dashboard.auto_open_browser` off, and not on a headless SSH session, where
+    # a console browser would take over the terminal (service_boot.py).
+    is_ssh = bool(os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_CLIENT"))
+    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    no_open = (
+        bool(gw["no_open"])
+        or not cfg.dashboard.auto_open_browser
+        or (is_ssh and not has_display and sys.platform != "darwin")
+    )
+    _host, port = parse_dashboard_url(cfg.dashboard.url)
+    override = gw["port_override"]
+    if override is not None:
+        port = 0 if override == "auto" else int(override)
+    try:
+        owner_id = str(cfg.load_credentials(propagate=False).get(CRED_OWNER_ID, "") or "")
+    except Exception:
+        owner_id = ""
+    return signin.sign_in_then_boot(exc, port=port, owner_id=owner_id, no_open=no_open)
+
+
 def _project_dir_file() -> Path:
     """Return the path to the saved project_dir file, respecting KIROCREW_HOME."""
     return config_dir() / "project_dir"
@@ -707,13 +751,22 @@ def main() -> None:
         # redaction. PluginAdmissionError subclasses PlatformCompositionError.
         if isinstance(exc, PlatformCompositionError):
             sign_in = _is_sign_in_command(args)
-            if args.command != "doctor" and not sign_in:
+            signed_in_port = _serve_sign_in_first(args, exc) if args.command == "gateway" else None
+            if signed_in_port is not None:
+                # Enterprise build, nobody signed in: the sign-in screen ran, a
+                # sign-in landed and the rules then loaded. The browser tab that
+                # signed in carries on, on the same port, so no second tab opens.
+                args.port = str(signed_in_port)
+                args.no_open = True
+                _platform_boot_error = None
+            elif args.command != "doctor" and not sign_in:
                 # Enterprise build: governance rules that did not load stop Crew
                 # here, before any server binds, with what failed and the fix.
                 from kiro_crew.enterprise_boot import refuse_policy_boot
 
                 refuse_policy_boot(exc)
-            if args.command == "doctor" or sign_in:
+                raise
+            else:
                 # The sign-in verbs are what an enterprise build's policy fetch needs
                 # first, so a missing sign-in must not lock them out. They touch only
                 # the Kiro sign-in in Crew's vault and run no agent.
@@ -721,8 +774,6 @@ def main() -> None:
                     "platform composition failed; %s runs without it", args.command, exc_info=True
                 )
                 _platform_boot_error = exc
-            else:
-                raise
         else:
             # Standalone boot never raises; only genuinely-unexpected errors
             # reach here, and the standalone edition must not break on a corrupt

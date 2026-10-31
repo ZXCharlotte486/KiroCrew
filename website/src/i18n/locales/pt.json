@@ -7570,6 +7570,8 @@
       "enterprise_start_url_label": "URL de início da sua organização",
       "enterprise_start_url_hint": "Digite primeiro: o comando abaixo é preenchido e então você pode copiá-lo. É o endereço do seu portal de acesso da AWS; sua equipe de TI tem esse endereço.",
       "enterprise_sign_in_aside": "Conecte este gateway uma vez à conta da sua organização e o {{productName}} cuida do resto.",
+      "enterprise_gateway_stopped_title": "O {{productName}} parou",
+      "enterprise_gateway_stopped_body": "Não foi possível carregar as regras da sua organização depois que você entrou. O terminal que o iniciou mostra o motivo. Corrija isso e inicie o {{productName}} novamente.",
       "relock_ask_owner": "Peça ao proprietário do {{productName}} para entrar novamente neste gateway. Este aviso some assim que isso for feito.",
       "relock_enterprise_new_window": "Para entrar de novo, abra o painel em uma nova janela ou aba. A tela de login mostra o comando com um botão de copiar. Esta janela mantém o seu trabalho.",
       "relock_exact_command_hint": "Este gateway usa sua própria cópia do Kiro CLI. Para entrar novamente, abra o painel em uma nova janela ou aba: a tela de entrada dele mostra o comando exato com um botão para copiar. Esta janela mantém seu trabalho.",

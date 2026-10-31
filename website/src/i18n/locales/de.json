@@ -7444,6 +7444,8 @@
       "enterprise_start_url_label": "Start-URL deiner Organisation",
       "enterprise_start_url_hint": "Gib sie zuerst ein: Der Befehl unten übernimmt sie, dann kannst du ihn kopieren. Das ist die Adresse deines AWS-Zugangsportals; dein IT-Team kennt sie.",
       "enterprise_sign_in_aside": "Melde dieses Gateway einmal mit dem Konto deiner Organisation an, und {{productName}} übernimmt den Rest.",
+      "enterprise_gateway_stopped_title": "{{productName}} wurde beendet",
+      "enterprise_gateway_stopped_body": "Nach deiner Anmeldung konnten die Regeln deiner Organisation nicht geladen werden. Das Terminal, in dem es gestartet wurde, zeigt den Grund. Behebe ihn und starte {{productName}} dann erneut.",
       "relock_ask_owner": "Bitte den {{productName}}-Eigentümer, sich an diesem Gateway erneut anzumelden. Dieser Hinweis verschwindet, sobald das geschehen ist.",
       "relock_enterprise_new_window": "Um dich erneut anzumelden, öffne das Dashboard in einem neuen Fenster oder Tab. Sein Anmeldebildschirm zeigt den Befehl mit einer Kopier-Schaltfläche. Dieses Fenster behält deine Arbeit.",
       "relock_exact_command_hint": "Dieses Gateway nutzt eine eigene Kopie von Kiro CLI. Um dich erneut anzumelden, öffne das Dashboard in einem neuen Fenster oder Tab: Der Anmeldebildschirm dort zeigt den genauen Befehl mit einer Kopierschaltfläche. Dieses Fenster behält deine Arbeit.",
