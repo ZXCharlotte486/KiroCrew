@@ -349,6 +349,12 @@ export default function SkillsTab() {
   const allFiltered = useMemo(() => [...localSkills, ...packageSkills], [localSkills, packageSkills])
   const selectedSkill = useMemo(() => skills.find(s => s.key === selectedKey) ?? null, [skills, selectedKey])
 
+  // Keyed by `key` so the Context budget view can join each cost row to its
+  // skill's description and detail. Built from the full (unfiltered) list: the
+  // budget is a separate surface and must resolve every row, not only the ones
+  // the Skills filter currently shows.
+  const skillsByKey = useMemo(() => new Map(skills.map(s => [s.key, s])), [skills])
+
   // Narrow viewport shows one pane at a time; a desktop shows both.
   const { isMobile, showList, showDetail, openDetail, closeDetail } = useListDetailView()
 
@@ -372,6 +378,19 @@ export default function SkillsTab() {
       setSelectedKey(best.key)
     }
   }, [allFiltered, selectedKey, detailEditing, skillFilter])
+
+  // Open a skill's detail from the Context budget view: leave the budget view
+  // and select the row's skill through the SAME path a list click takes
+  // (userPicked so the filter effect does not steal the selection). Reuses the
+  // existing selection mechanism rather than adding a route — the budget rows
+  // do not change what selecting a skill already does.
+  const openSkillFromBudget = (key: string) => {
+    hideBudget()
+    userPickedRef.current = true
+    setSelectedKey(key)
+    setDetailEditing(false)
+    openDetail()
+  }
 
   // Moving on to another skill also retires a delete failure — but only one
   // the user could have SEEN: the test is the banner's own render gate
@@ -465,7 +484,16 @@ export default function SkillsTab() {
   </>)
 
   // Control plane: full-page budget view, deep-linkable via ?view=budget.
-  if (viewBudget) return <SkillContextBudget onBack={hideBudget} />
+  // The budget endpoint reports cost only; its rows carry the same `key` the
+  // skills list does, so the description and the detail view it links to are a
+  // pure frontend join against the already-loaded catalog — no new backend read.
+  if (viewBudget) return (
+    <SkillContextBudget
+      onBack={hideBudget}
+      skillsByKey={skillsByKey}
+      onOpenSkill={openSkillFromBudget}
+    />
+  )
 
   // One predicate for the Create button's `disabled` and its onClick guard, so
   // the two can never disagree — a keyboard activation that races the disabled
