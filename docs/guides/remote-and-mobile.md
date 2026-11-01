@@ -903,9 +903,9 @@ The proxy strips the prefix before forwarding, relays cookies, and rewrites
 
 ### Share one Crew with teammates
 
-Sharing is a preview: it requires `KIROCREW_SHARED_CREW_PREVIEW=1` in the
-gateway's environment. Without it, Settings > People and the direct link do not
-appear.
+Sharing is a preview: turn on Shared Crew in Feature Previews and restart the
+gateway, or set `KIROCREW_SHARED_CREW_PREVIEW=1` in the gateway's environment.
+Without it, Settings > People and the direct link do not appear.
 
 Several people can use one Crew over Tailscale. With the direct link turned on
 (it is off by default) and Tailscale running on the Crew's machine, the gateway

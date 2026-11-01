@@ -209,6 +209,25 @@ describe('SessionCreatorByline', () => {
     expect(screen.getByTitle('Created by Unattributed')).toBeInTheDocument()
   })
 
+  it('names the owner on a legacy session, and keeps Unattributed for a creator nobody can name', () => {
+    const owner = { id: 'p_owner', kind: 'human' as const, display: { name: "Bolin's MacBook", login: '', captured_at: null } }
+    const legacy = { creator: owner, availability: 'legacy_missing' as const, created_at: null }
+    const { rerender } = render(<SessionCreatorByline attribution={legacy} />)
+    expect(screen.getByTitle("Created by Bolin's MacBook")).toBeInTheDocument()
+    expect(screen.queryByTitle(/Unattributed/)).toBeNull()
+    // A gateway that could not read this machine's name still sends the token subject.
+    rerender(<SessionCreatorByline attribution={{ ...legacy, creator: { ...owner, display: { name: 'local-app', login: '', captured_at: null } } }} />)
+    expect(screen.getByTitle('Created by Crew owner')).toBeInTheDocument()
+    rerender(<SessionCreatorByline attribution={{ ...legacy, creator: UNKNOWN }} />)
+    expect(screen.getByTitle('Created by Unattributed')).toBeInTheDocument()
+  })
+
+  it('reads the owner as You to the owner viewing a legacy session', () => {
+    const owner = { id: 'p_owner', kind: 'human' as const, display: { name: "Bolin's MacBook", login: '', captured_at: null } }
+    mount(<SessionCreatorByline attribution={{ creator: owner, availability: 'legacy_missing', created_at: null }} />, 'p_owner')
+    expect(screen.getByTitle('Created by You')).toBeInTheDocument()
+  })
+
   it('names the trigger of a scheduled session, never a person', () => {
     render(<SessionCreatorByline attribution={{ creator: UNKNOWN, availability: 'legacy_missing', created_at: null, trigger: { kind: 'scheduled', ref: 'abc12345', name: 'Nightly', configured_by: null } }} />)
     expect(screen.getByTitle('Started by Scheduled: Nightly')).toBeInTheDocument()

@@ -1,5 +1,7 @@
 /** The open session's collaboration state, above the composer: who else is
- *  here and this session's shared decisions. Accepted work is not listed here:
+ *  here and this session's shared decisions. Decisions show only once the
+ *  session is shared: another person is present, or a decision involves
+ *  someone other than the viewer. Accepted work is not listed here:
  *  a send the host holds for capacity shows on its own message bubble
  *  (`QueuedSendLabel`). Each part reads only when the Crew reports the
  *  capability behind it, and the whole strip renders nothing when there is
@@ -21,7 +23,7 @@ import {
 } from '../../../hooks/sharedCrew/useSharedCrew'
 import { usePresenceReporter } from '../../../hooks/sharedCrew/usePresenceReporter'
 import { i18nT } from '../../../i18n/t'
-import { DecisionAttributionList } from './DecisionAttributionList'
+import { DecisionAttributionList, involvesOthers, visibleDecisions } from './DecisionAttributionList'
 import { othersPresent, PresenceChips } from './PresenceChips'
 
 /** A composer `input` listener target: the strip tells the reporter about
@@ -65,8 +67,9 @@ export function SessionCollabStrip({ sessionKey, typing }: { sessionKey: string 
   // Who approved what is for a Crew with other people in it; alone, every
   // line would only name the owner's own token.
   const team = useTeamAttribution()
-  const decisionItems = team ? decisions.data?.items ?? [] : []
   const viewerId = viewer.data && !isUnknownPrincipal(viewer.data) ? viewer.data.id : ''
+  const teamDecisions = team ? decisions.data?.items ?? [] : []
+  const decisionItems = shown || involvesOthers(teamDecisions, viewerId) ? visibleDecisions(teamDecisions) : []
   const failed = [caps, viewer, mode, people, presence, decisions, sendState, typingLease].find(query => query.isError)
   if (!sessionKey || (!failed && !shown && decisionItems.length === 0)) return null
   return (

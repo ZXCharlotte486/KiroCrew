@@ -16,12 +16,15 @@ from typing import Any
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
+from shared_crew_host_isolation import host_isolation  # noqa: F401
 
 from kiro_crew.dashboard import tailnet_live_allowlist
 from kiro_crew.shared_crew import audit, routes_invites, routes_people
 from kiro_crew.shared_crew import tailscale_invite_store as store
 from kiro_crew.shared_crew.contracts import ACTOR_REQUEST_KEY, ActorContext, Provenance, Transport
 from kiro_crew.shared_crew.identity import local_operator_principal, tailnet_principal
+
+pytestmark = pytest.mark.usefixtures("host_isolation")
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
 BOB = tailnet_principal("bob@example.com", "bob-laptop", Provenance.TAILSCALE_LISTENER)

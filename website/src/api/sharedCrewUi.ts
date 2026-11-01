@@ -41,11 +41,13 @@ export interface SharedCrewSessionPage extends SessionPage<SharedCrewSessionItem
 }
 
 /** Where a People row's evidence came from. Unknown values read as observed. */
-export type PeopleSource = 'observed' | 'session_creator' | 'directory'
+export type PeopleSource = 'observed' | 'session_creator' | 'directory' | 'tailscale_share'
 
 export interface PeopleRow {
   principal: PublicPrincipal
   sources: PeopleSource[]
+  /** This machine's owner. */
+  is_owner?: boolean
   provenance?: string
   first_seen_at?: number | null
   last_seen_at?: number | null

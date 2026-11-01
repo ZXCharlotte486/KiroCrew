@@ -509,7 +509,7 @@ describe('ChatInput orphaned approval (404)', () => {
     await act(async () => {})
     fireEvent.click(screen.getByText('Allow once'))
     await waitFor(() => {
-      expect(screen.getByRole('status')).toHaveTextContent('Rejected by Bob')
+      expect(screen.getByRole('status')).toHaveTextContent('Bob rejected')
     })
     expect(store.getState().chat.messages[1].meta!.resolved).toBe('rejected')
   })

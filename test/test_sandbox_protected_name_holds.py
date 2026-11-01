@@ -403,7 +403,13 @@ class TestLeafOnlyPopulationIsRecorded:
     #:   inode stays the same on a republish. It sits at the data-home root beside
     #:   writable siblings, so no enclosing directory mask can hold it and leaf-only
     #:   is the only hold available, the same as ``member-records``.
-    EXPECTED: dict[str, int] = {"standard": 299, "cc": 306, "strict": 307}
+    #:
+    #: One more root-level leaf, one more entry per tier:
+    #:
+    #: * ``shared_crew_preview.json`` -- the owner's Shared Crew switch, a file at
+    #:   the data-home root beside writable siblings, so leaf-only is the only
+    #:   hold available, as for ``decisions_consent.json``.
+    EXPECTED: dict[str, int] = {"standard": 300, "cc": 307, "strict": 308}
 
     @pytest.mark.parametrize("tier", TIERS)
     def test_leaf_only_count_has_not_grown(self, tier: str) -> None:

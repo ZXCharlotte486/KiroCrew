@@ -360,6 +360,7 @@ from kiro_crew.config.sections_shared_crew import (  # noqa: F401
     SHARED_CREW_BOUNDS,
     SHARED_CREW_EXPOSURE_FLAGS,
     SHARED_CREW_FLAGS,
+    SHARED_CREW_NEEDS_PREVIEW_HELP,
     EffectiveLimits,
     SharedCrewConfig,
     effective_limits,
