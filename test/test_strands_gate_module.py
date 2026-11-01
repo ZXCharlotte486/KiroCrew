@@ -121,6 +121,7 @@ def _stand_in_strands(monkeypatch: pytest.MonkeyPatch) -> type:
 def gated(monkeypatch: pytest.MonkeyPatch) -> type:
     for name in (
         "KIROCREW_STRANDS_PROJECT",
+        "KIROCREW_STRANDS_PROJECT_SHA256",
         "KIROCREW_STRANDS_GATE_MARKER",
         "KIROCREW_STRANDS_GATE_SESSION",
         "KIROCREW_STRANDS_WITHHELD",
@@ -509,3 +510,175 @@ def test_a_linked_key_file_refuses_the_start(tmp_path, gated) -> None:
     link.symlink_to(target)
     with pytest.raises(gated.gate.ProviderKeysRefused, match="not a regular file"):
         gated.gate._load_provider_keys(str(link))
+
+
+# ── The operator's project is the confirmed version, checked again right before import ──
+
+
+def _user_project(root: Path) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "agent.py").write_text(
+        "import helper\nfrom strands import Agent\nagent = Agent()\nMARK = helper.MARK\n",
+        encoding="utf-8",
+    )
+    (root / "helper.py").write_text("MARK = 'confirmed'\n", encoding="utf-8")
+    (root / "data").mkdir()
+    (root / "data" / "notes.txt").write_bytes(b"\x00\xffbytes")
+    return root / "agent.py"
+
+
+@pytest.fixture
+def isolated_import(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """The project load changes interpreter-wide import state; give it back afterwards."""
+    monkeypatch.setattr(sys, "meta_path", list(sys.meta_path))
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    for name in ("helper", "later", "fresh"):
+        monkeypatch.delitem(sys.modules, name, raising=False)
+    monkeypatch.delitem(sys.modules, "kirocrew_strands_user_project", raising=False)
+
+
+def test_the_gate_fingerprint_equals_the_gateway_one(gated, tmp_path) -> None:
+    from kiro_crew.acp.harness import strands_project_pin
+
+    entry = _user_project(tmp_path / "proj")
+    (entry.parent / "__pycache__").mkdir()
+    (entry.parent / "__pycache__" / "helper.cpython-312.pyc").write_bytes(b"stale")
+    expected, count = strands_project_pin.project_fingerprint(entry)
+    assert gated.gate._project_fingerprint(entry)[0] == expected
+    assert len(gated.gate._project_fingerprint(entry)[1]) == count
+    assert gated.gate._PIN_MAX_FILES == strands_project_pin.MAX_FILES
+    assert gated.gate._PIN_MAX_BYTES == strands_project_pin.MAX_BYTES
+
+
+def test_a_confirmed_project_is_imported(gated, tmp_path, monkeypatch, isolated_import) -> None:
+    entry = _user_project(tmp_path / "proj")
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    module, _captured = gated.gate._load_user_project(str(entry.parent))
+    assert module.MARK == "confirmed"
+
+
+def test_planted_bytecode_never_runs_instead_of_the_confirmed_source(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    """An unchecked-hash .pyc is trusted by Python without its source; the project's
+    imports never read bytecode at all."""
+    import py_compile
+
+    entry = _user_project(tmp_path / "proj")
+    helper = entry.parent / "helper.py"
+    evil = tmp_path / "evil.py"
+    evil.write_text("MARK = 'planted'\n", encoding="utf-8")
+    # Where Python looks: the in-tree cache, and a moved cache the agent could write.
+    for prefix in (None, str(tmp_path / "moved-cache")):
+        monkeypatch.setattr(sys, "pycache_prefix", prefix)
+        py_compile.compile(
+            str(evil),
+            cfile=importlib.util.cache_from_source(str(helper)),
+            doraise=True,
+            invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH,
+        )
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    module, _captured = gated.gate._load_user_project(str(entry))
+    assert module.MARK == "confirmed"
+
+
+def test_a_project_file_changed_mid_session_is_not_imported_later(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    entry = _user_project(tmp_path / "proj")
+    (entry.parent / "later.py").write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    gated.gate._load_user_project(str(entry))
+    # After the load, the agent edits a module the project imports lazily, and adds one.
+    (entry.parent / "later.py").write_text("VALUE = 'edited'\n", encoding="utf-8")
+    (entry.parent / "fresh.py").write_text("VALUE = 'new'\n", encoding="utf-8")
+    importlib.invalidate_caches()  # the folder listing Python caches, as a later turn sees it
+    with pytest.raises(ImportError, match="not part of the Strands project version"):
+        importlib.import_module("later")
+    with pytest.raises(ImportError, match="not part of the Strands project version"):
+        importlib.import_module("fresh")
+
+
+def test_a_file_swapped_after_the_launch_check_is_not_imported(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    entry = _user_project(tmp_path / "proj")
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    (entry.parent / "helper.py").write_text("raise SystemExit('ran')\n", encoding="utf-8")
+    with pytest.raises(PermissionError, match="not the version confirmed"):
+        gated.gate._load_user_project(str(entry))
+    assert "helper" not in sys.modules
+
+
+def test_a_project_with_no_pin_is_not_imported(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    entry = _user_project(tmp_path / "proj")
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", "")
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    with pytest.raises(PermissionError, match="not the version confirmed"):
+        gated.gate._load_user_project(str(entry))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlink creation needs privileges")
+def test_a_linked_spelling_of_the_folder_is_still_checked(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    entry = _user_project(tmp_path / "proj")
+    (entry.parent / "later.py").write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    gated.gate._load_user_project(str(entry))
+    alias = tmp_path / "alias"
+    alias.symlink_to(entry.parent, target_is_directory=True)
+    sys.path.insert(0, str(alias))
+    (entry.parent / "later.py").write_text("VALUE = 'edited'\n", encoding="utf-8")
+    with pytest.raises(ImportError, match="not part of the Strands project version"):
+        importlib.import_module("later")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symlink creation needs privileges")
+def test_a_file_linked_out_of_the_folder_mid_session_is_not_imported(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    entry = _user_project(tmp_path / "proj")
+    (entry.parent / "later.py").write_text("VALUE = 1\n", encoding="utf-8")
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    gated.gate._load_user_project(str(entry))
+    outside = tmp_path / "elsewhere.py"
+    outside.write_text("VALUE = 'unconfirmed'\n", encoding="utf-8")
+    (entry.parent / "later.py").unlink()
+    (entry.parent / "later.py").symlink_to(outside)
+    importlib.invalidate_caches()
+    with pytest.raises(ImportError, match="not part of the Strands project version"):
+        importlib.import_module("later")
+
+
+def test_a_confirmed_package_still_reads_its_own_resources(
+    gated, tmp_path, monkeypatch, isolated_import
+) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    (root / "agent.py").write_text(
+        "import importlib.resources, pkgutil\n"
+        "from strands import Agent\n"
+        "agent = Agent()\n"
+        "TEXT = importlib.resources.files('kc_pkg').joinpath('prompt.txt').read_text()\n"
+        "DATA = pkgutil.get_data('kc_pkg', 'prompt.txt')\n",
+        encoding="utf-8",
+    )
+    (root / "kc_pkg").mkdir()
+    (root / "kc_pkg" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "kc_pkg" / "prompt.txt").write_text("hi", encoding="utf-8")
+    monkeypatch.delitem(sys.modules, "kc_pkg", raising=False)
+    entry = root / "agent.py"
+    monkeypatch.setattr(gated.gate, "PROJECT_SHA256", gated.gate._project_fingerprint(entry)[0])
+    monkeypatch.setattr(gated.gate, "STATE_DIR", str(tmp_path / "state"))
+    module, _captured = gated.gate._load_user_project(str(entry))
+    assert module.TEXT == "hi"
+    assert module.DATA == b"hi"

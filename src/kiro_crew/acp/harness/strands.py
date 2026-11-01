@@ -59,6 +59,7 @@ from kiro_crew.acp.harness.strands_keys import (
     remove_keys_dir,
     write_keys_file,
 )
+from kiro_crew.acp.harness.strands_project_pin import project_pin_issue
 from kiro_crew.acp.mcp_startable import prune_unstartable
 from kiro_crew.acp.transport_errors import AcpError, AcpToolGateUnroutable
 from kiro_crew.acp.transport_framing import write_frames_blocking
@@ -93,7 +94,7 @@ __all__ = [
 
 #: The SHA-256 of the shipped gate module, LF line endings. A copy with other bytes is
 #: never loaded.
-STRANDS_GATE_SHA256 = "c98689ad57d75534087b337fce62791940175164ebcdd5f177bcc518fa0f35f6"
+STRANDS_GATE_SHA256 = "2df558fde4beeee56b9f8e67989572dd490c058fed6b41c55f5bc38a850f4ffe"
 
 #: What the gate module names itself in its load marker; the routing table's probe.
 STRANDS_GATE_NAME = "kiro-crew-strands-gate"
@@ -102,6 +103,8 @@ STRANDS_GATE_NAME = "kiro-crew-strands-gate"
 _ENV_GATE_SESSION = "KIROCREW_STRANDS_GATE_SESSION"
 _ENV_GATE_MARKER = "KIROCREW_STRANDS_GATE_MARKER"
 _ENV_PROJECT = "KIROCREW_STRANDS_PROJECT"
+# The project's confirmed fingerprint; the gate re-checks the files against it.
+_ENV_PROJECT_SHA256 = "KIROCREW_STRANDS_PROJECT_SHA256"
 _ENV_STATE_DIR = "KIROCREW_STRANDS_STATE_DIR"
 _ENV_WITHHELD = "KIROCREW_STRANDS_WITHHELD"
 
@@ -370,18 +373,21 @@ def _strands_vault_env() -> dict[str, str]:
     return resolved
 
 
-def _strands_user_project() -> str:
-    """The operator's project from ``agent.strands_project``, absolute, or ``""``.
+def _strands_user_project() -> tuple[str, str]:
+    """``(entry, pin)``: the operator's project from ``agent.strands_project``, absolute,
+    and its confirmed fingerprint, or ``("", "")`` for the bundled project.
 
-    Raises :exc:`ValueError` when the setting names nothing loadable, so the session
-    is refused with the path rather than started on the bundled project instead.
-    Blocking (reads config and stats the path).
+    Raises :exc:`ValueError` when the setting names nothing loadable, or a project whose
+    files are not the version confirmed in ``agent.strands_project_sha256``, so the
+    session is refused by name rather than started on other code. Blocking (reads
+    config, walks and reads the project folder).
     """
     from kiro_crew.config.loader import KiroCrewConfig
 
-    raw = KiroCrewConfig.load().agent.strands_project
+    agent = KiroCrewConfig.load().agent
+    raw = agent.strands_project
     if not raw:
-        return ""
+        return "", ""
     target = Path(raw).expanduser()
     entry = target / "agent.py" if target.is_dir() else target
     if not entry.is_file() or entry.suffix != ".py":
@@ -389,7 +395,14 @@ def _strands_user_project() -> str:
             f"agent.strands_project names {raw!r}, which is not a Strands Python project. "
             "Point it at the project's agent.py, or at a folder holding one."
         )
-    return str(entry.resolve())
+    resolved = str(entry.resolve())
+    # Before any project code is imported and before any key is handed over: the
+    # project runs only as the version the operator confirmed (strands_project_pin).
+    pin = agent.strands_project_sha256.strip().lower()
+    issue = project_pin_issue(resolved, pin)
+    if issue:
+        raise ValueError(issue)
+    return resolved, pin
 
 
 #: The provider prefixes the pinned CLI's ``--model`` accepts
@@ -837,6 +850,7 @@ class StrandsLaunch(ProcessAdapter):
     def __init__(self) -> None:
         self._nonce = ""
         self._project = ""
+        self._project_pin = ""
         self._state_dir = ""
         self._session: ProcessSession | None = None
 
@@ -863,7 +877,7 @@ class StrandsLaunch(ProcessAdapter):
                 f"{python_issue}, then start a new chat.", transient=False, user_worded=True
             )
         try:
-            self._project = await asyncio.to_thread(_strands_user_project)
+            self._project, self._project_pin = await asyncio.to_thread(_strands_user_project)
             vault_env_names = await asyncio.to_thread(_strands_vault_env_names)
         except ValueError as exc:
             raise AcpError(str(exc), transient=False, user_worded=True) from None
@@ -987,6 +1001,7 @@ class StrandsLaunch(ProcessAdapter):
         env[_ENV_STATE_DIR] = os.path.join(str(probe_dir), "sessions")
         if self._project:
             env[_ENV_PROJECT] = self._project
+            env[_ENV_PROJECT_SHA256] = self._project_pin
         cleanup: str | None = None
         try:
             probe_argv, cleanup = await wrap_argv_async(
@@ -1029,6 +1044,7 @@ class StrandsLaunch(ProcessAdapter):
             env[_ENV_STATE_DIR] = self._state_dir
         if self._project:
             env[_ENV_PROJECT] = self._project
+            env[_ENV_PROJECT_SHA256] = self._project_pin
 
     async def prepare_spawn_env(
         self,

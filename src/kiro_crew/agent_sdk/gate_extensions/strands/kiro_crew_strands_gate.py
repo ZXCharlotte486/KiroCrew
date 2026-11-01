@@ -28,6 +28,9 @@ read-only copy; it is never imported by Kiro Crew itself.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import importlib.abc
+import importlib.machinery
 import importlib.util
 import inspect
 import json
@@ -199,6 +202,7 @@ _DUMPABLE = _make_non_dumpable() if _PROVIDER_KEYS else "no-keys"
 NONCE = os.environ.pop("KIROCREW_STRANDS_GATE_SESSION", "")
 MARKER_PATH = os.environ.pop("KIROCREW_STRANDS_GATE_MARKER", "")
 PROJECT = os.environ.pop("KIROCREW_STRANDS_PROJECT", "")
+PROJECT_SHA256 = os.environ.pop("KIROCREW_STRANDS_PROJECT_SHA256", "")
 STATE_DIR = os.environ.pop("KIROCREW_STRANDS_STATE_DIR", "") or str(Path(".agent", "sessions"))
 WITHHELD = tuple(
     sorted({name for name in os.environ.pop("KIROCREW_STRANDS_WITHHELD", "").split(":") if name})
@@ -377,6 +381,176 @@ def _require_gated(agent: object) -> Agent:
     return agent
 
 
+#: The project fingerprint. MUST equal ``kiro_crew.acp.harness.strands_project_pin``'s
+#: algorithm byte for byte (a test compares the two); this file imports nothing of
+#: Kiro Crew, so it carries its own copy.
+_PIN_DOMAIN = b"kirocrew-strands-project-v1\0"
+_PIN_MAX_FILES = 5000
+_PIN_MAX_BYTES = 64 * 1024 * 1024
+_READ_FLAGS = (
+    os.O_RDONLY
+    | getattr(os, "O_NOFOLLOW", 0)
+    | getattr(os, "O_NONBLOCK", 0)
+    | getattr(os, "O_BINARY", 0)
+)
+
+
+def _read_regular(path: str, rel: str, limit: int) -> bytes:
+    """The bytes of the regular file at *path*, never through a link, or a refusal."""
+    with os.fdopen(os.open(path, _READ_FLAGS), "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise PermissionError(f"{rel} is not a regular file")
+        if info.st_size > limit:
+            raise PermissionError("too many bytes")
+        data = handle.read(info.st_size + 1)
+    if len(data) != info.st_size:
+        raise PermissionError(f"{rel} changed while it was read")
+    return data
+
+
+def _project_fingerprint(entry: Path) -> tuple[str, dict[str, str]]:
+    """``(sha256, {file: its own sha256})`` over every regular file under *entry*'s
+    folder, or :exc:`OSError`. Files are keyed by :func:`_lexical_key`."""
+    found: list[tuple[str, str]] = []
+    pending: list[tuple[str, str]] = [(str(entry.parent), "")]
+    while pending:
+        folder, prefix = pending.pop()
+        with os.scandir(folder) as entries:
+            listed = list(entries)
+        for item in listed:
+            rel = f"{prefix}{item.name}"
+            junction = getattr(item, "is_junction", None)
+            if item.is_symlink() or (junction is not None and junction()):
+                raise PermissionError(f"{rel} is a link")
+            mode = os.lstat(item.path).st_mode
+            if stat.S_ISDIR(mode):
+                if item.name != "__pycache__":
+                    pending.append((item.path, f"{rel}/"))
+            elif stat.S_ISREG(mode):
+                found.append((rel, item.path))
+                if len(found) > _PIN_MAX_FILES:
+                    raise PermissionError("too many files")
+            else:
+                raise PermissionError(f"{rel} is not a regular file")
+    digest = hashlib.sha256(_PIN_DOMAIN)
+    files: dict[str, str] = {}
+    total = 0
+    for rel, path in sorted(found):
+        data = _read_regular(path, rel, _PIN_MAX_BYTES - total)
+        total += len(data)
+        name = rel.encode("utf-8", "surrogateescape")
+        digest.update(len(name).to_bytes(8, "big") + name)
+        digest.update(len(data).to_bytes(8, "big"))
+        digest.update(data)
+        files[_lexical_key(path)] = hashlib.sha256(data).hexdigest()
+    return digest.hexdigest(), files
+
+
+def _lexical_key(path: str) -> str:
+    """The path as written, made absolute: what the folder walk recorded."""
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _folder_key(path: str) -> str:
+    """The path with its FOLDER resolved and its last name kept: a link alias of the
+    project folder on ``sys.path`` maps to the recorded file, a link at the file does not."""
+    absolute = os.path.abspath(path)
+    folder, name = os.path.split(absolute)
+    return os.path.normcase(os.path.join(os.path.realpath(folder), name))
+
+
+class _ConfirmedSource(importlib.machinery.SourceFileLoader):
+    """A project ``.py`` file's loader that compiles only bytes matching its confirmed
+    digest and never reads bytecode: a cached ``.pyc`` is outside the fingerprint, and
+    Python trusts an unchecked-hash ``.pyc`` without looking at its source. Everything
+    else (package resources, ``get_data``, ``is_package``) is the ordinary source
+    loader's."""
+
+    def __init__(self, fullname: str, path: str, expected: str | None) -> None:
+        super().__init__(fullname, path)
+        self._expected = expected
+
+    def get_code(self, fullname: str) -> Any:
+        origin = self.get_filename(fullname)
+        refusal = (
+            f"{origin} is not part of the Strands project version confirmed in "
+            "agent.strands_project_sha256, so Kiro Crew does not import it. Review "
+            "the project, confirm it again, and start a new chat."
+        )
+        if self._expected is None or os.path.islink(origin):
+            raise ImportError(refusal)
+        try:
+            data = _read_regular(origin, origin, _PIN_MAX_BYTES)
+        except OSError as exc:
+            raise ImportError(f"Kiro Crew cannot read {origin} ({exc})") from None
+        if hashlib.sha256(data).hexdigest() != self._expected:
+            raise ImportError(refusal)
+        return compile(data, origin, "exec", dont_inherit=True)
+
+
+class _ConfirmedProjectFinder(importlib.abc.MetaPathFinder):
+    """Every import that resolves into the project folder, for the whole session, runs
+    only a confirmed ``.py`` file through :class:`_ConfirmedSource`.
+
+    "Into the folder" is judged on the path as written, with its folder resolved, and
+    fully resolved: a file linked out of the folder, or the folder reached through a
+    link, is still the folder's, so it is checked and never handed to Python's own
+    loader."""
+
+    def __init__(self, root: str, files: dict[str, str]) -> None:
+        self._roots = {_lexical_key(root), os.path.normcase(os.path.realpath(root))}
+        self._files = files
+
+    def _under(self, key: str) -> bool:
+        return any(key == root or key.startswith(root + os.sep) for root in self._roots)
+
+    def _inside(self, path: str) -> bool:
+        keys = (_lexical_key(path), _folder_key(path), os.path.normcase(os.path.realpath(path)))
+        return any(self._under(key) for key in keys)
+
+    def find_spec(self, name: str, path: Any = None, target: Any = None) -> Any:
+        spec = importlib.machinery.PathFinder.find_spec(name, path)
+        if spec is None or not spec.origin or not spec.has_location:
+            return None
+        if not self._inside(spec.origin):
+            return None
+        if not spec.origin.endswith(".py"):
+            raise ImportError(
+                f"{spec.origin} is not Python source; Kiro Crew imports only confirmed "
+                ".py files from the Strands project folder."
+            )
+        expected = self._files.get(_lexical_key(spec.origin)) or self._files.get(
+            _folder_key(spec.origin)
+        )
+        loader = _ConfirmedSource(name, spec.origin, expected)
+        return importlib.util.spec_from_file_location(
+            name,
+            spec.origin,
+            loader=loader,
+            submodule_search_locations=spec.submodule_search_locations,
+        )
+
+
+def _require_confirmed_project(entry: Path) -> dict[str, str]:
+    """The per-file digests of the confirmed project, or a refusal.
+
+    Kiro Crew checked the same fingerprint before it started this process; this is the
+    same check right before the import, so a file swapped in between is not run.
+    """
+    try:
+        current, files = _project_fingerprint(entry)
+    except OSError as exc:
+        current, files = f"unreadable ({exc})", {}
+    if not PROJECT_SHA256 or current != PROJECT_SHA256:
+        raise PermissionError(
+            "The Strands project's files are not the version confirmed in "
+            "agent.strands_project_sha256, so Kiro Crew does not run them. Review the "
+            "project, confirm it again, and start a new chat."
+        )
+    return files
+
+
 def _load_user_project(path: str) -> tuple[Any, list[tuple[Agent, tuple, dict]]]:
     """Import the operator's project module with every Agent it builds gated."""
     target = Path(path).expanduser()
@@ -387,6 +561,13 @@ def _load_user_project(path: str) -> tuple[Any, list[tuple[Agent, tuple, dict]]]
             "Python project: point it at the project's agent.py or its folder."
         )
     entry = entry.resolve()
+    files = _require_confirmed_project(entry)
+    # Just ahead of the path finder, before the folder joins sys.path: from here on,
+    # any import that lands in the folder (now or later in the session) is checked.
+    # Built-in and frozen modules still resolve first, as they always do.
+    path_finder = importlib.machinery.PathFinder
+    at = next((i for i, f in enumerate(sys.meta_path) if f is path_finder), 0)
+    sys.meta_path.insert(at, _ConfirmedProjectFinder(str(entry.parent), files))
     sys.path.insert(0, str(entry.parent))
     captured: list[tuple[Agent, tuple, dict]] = []
     original_create_harness = strands_harness.create_harness
@@ -398,12 +579,14 @@ def _load_user_project(path: str) -> tuple[Any, list[tuple[Agent, tuple, dict]]]
 
     strands_harness.create_harness = capture_create_harness
     try:
-        spec = importlib.util.spec_from_file_location("kirocrew_strands_user_project", entry)
-        if spec is None or spec.loader is None:
+        name = "kirocrew_strands_user_project"
+        loader = _ConfirmedSource(name, str(entry), files.get(_lexical_key(str(entry))))
+        spec = importlib.util.spec_from_file_location(name, entry, loader=loader)
+        if spec is None:
             raise ImportError(f"cannot load the Strands project at {entry}")
         module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
+        loader.exec_module(module)
     finally:
         strands_harness.create_harness = original_create_harness
     return module, captured
